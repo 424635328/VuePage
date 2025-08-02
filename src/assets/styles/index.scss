@@ -1,0 +1,6 @@
+// src/assets/styles/index.scss
+
+// 使用 @forward 将 _variables.scss 中的所有成员（主要是 CSS 变量）转发出去。
+// 这样，任何 @use 了这个 index.scss 文件的组件，
+// 都可以直接访问到 _variables.scss 中的内容，而无需命名空间。
+@forward 'variables';

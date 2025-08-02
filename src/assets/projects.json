@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "title": "企业级管理后台",
+    "description": "一个功能丰富的企业级后台管理系统，包含权限控制、数据可视化图表、动态路由和多主题切换。",
+    "tags": ["Vue 3", "Pinia", "ECharts", "Element Plus"],
+    "imageUrl": "https://placehold.co/800x600/242424/FFF/png?text=Admin+Dashboard",
+    "liveUrl": "#",
+    "repoUrl": "#"
+  },
+  {
+    "id": 2,
+    "title": "跨平台电商小程序",
+    "description": "使用 Uni-app 开发的电商小程序，一套代码可编译到微信、支付宝等多个平台，实现了完整的购物流程。",
+    "tags": ["Uni-app", "Vue 2", "Vuex", "SCSS"],
+    "imageUrl": "https://placehold.co/800x600/242424/FFF/png?text=E-commerce+Mini-App",
+    "liveUrl": "#",
+    "repoUrl": "#"
+  },
+  {
+    "id": 3,
+    "title": "个人作品集网站 (本项目)",
+    "description": "采用 Vue 3 和 Vite 构建，展示了组件化、路由懒加载、滚动动画和响应式设计等现代前端技术。",
+    "tags": ["Vue 3", "Vite", "Pinia", "IntersectionObserver"],
+    "imageUrl": "https://placehold.co/800x600/242424/FFF/png?text=Portfolio+Website",
+    "liveUrl": "#",
+    "repoUrl": "#"
+  }
+]

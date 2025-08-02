@@ -1,0 +1,27 @@
+// src/assets/styles/_variables.scss
+
+/* Color Scheme - Dark Theme */
+:root {
+  --color-primary: #42d392; /* Vue 绿色作为高光色 */
+  --color-primary-dark: #34a879;
+  --color-primary-rgb: 66, 211, 146;
+
+  /* 背景色 */
+  --color-background: #1a1a1a; /* 主要背景 */
+  --color-background-soft: #242424; /* 卡片、页眉、页脚背景 */
+  --color-background-mute: #2f2f2f;
+
+  /* 边框色 */
+  --color-border: rgba(84, 84, 84, 0.48);
+  --color-border-hover: rgba(84, 84, 84, 0.65);
+
+  /* 文本颜色 */
+  --color-heading: rgba(255, 255, 255, 0.95);
+  --color-text: rgba(235, 235, 235, 0.8);
+  --color-text-light: rgba(235, 235, 235, 0.64);
+}
+
+/* Layout SCSS Variables */
+$header-height: 72px; /* 根据新 Header 调整高度 */
+$container-width: 1280px; /* 内容最大宽度 */
+$breakpoint-md: 768px;
