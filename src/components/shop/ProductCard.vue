@@ -1,5 +1,3 @@
-<!--  src/components/shop/ProductCard.vue -->
-
 <script setup>
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -42,8 +40,13 @@ const formattedDate = computed(() => {
       @click="prepareForNavigation"
     >
       <div class="card-image-wrapper">
+        <!--
+          ✨ 最终修复:
+          将 :src 的绑定从 product.image_url 更改为 product.thumbnail_url。
+          这与我们诊断日志中确认的数据字段完全匹配。
+        -->
         <img
-          :src="product.image_url || '/placeholder.svg'"
+          :src="product.thumbnail_url || '/placeholder.svg'"
           :alt="product.name"
           class="product-image"
           loading="lazy"

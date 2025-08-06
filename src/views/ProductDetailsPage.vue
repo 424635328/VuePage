@@ -18,8 +18,8 @@ const props = defineProps({
 });
 
 const product = ref(null);
-const images = ref([]); // To store all images for the gallery
-const currentImage = ref(''); // The currently displayed large image
+const images = ref([]);
+const currentImage = ref('');
 const loading = ref(true);
 const error = ref(null);
 
@@ -51,7 +51,7 @@ const contentBlocks = computed(() => {
 });
 
 function updateMetaTags(productData, firstImage) {
-  document.title = `${productData.name} | MHShop`;
+  document.title = `${productData.name} | MHStudio`;
   const updateOrCreateMeta = (property, content) => {
     let el = document.querySelector(`meta[property='${property}']`);
     if (!el) {
@@ -73,29 +73,32 @@ function updateMetaTags(productData, firstImage) {
 async function loadProductData() {
   loading.value = true;
   error.value = null;
-  // We always fetch from API now to get the associated images,
-  // the "state-first" approach is more complex with related data.
   try {
-    const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-product-details?id=${props.public_id}`;
+    const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-product-details?public_id=${props.public_id}`;
     const response = await fetch(functionUrl);
     if (!response.ok) {
-        const errorData = await response.json();
+        let errorData = { error: `服务器错误: ${response.status}` };
+        try {
+            errorData = await response.json();
+        } catch (_e) {
+            console.error('无法解析错误响应:', _e);
+        }
         throw new Error(errorData.error || `服务器错误: ${response.status}`);
     }
     const data = await response.json();
     product.value = data;
 
-    // Fetch images for the gallery
     const { data: imageData, error: imageError } = await supabase
       .from('product_images').select('id, image_url').eq('product_id', data.id).order('position');
     if (imageError) throw imageError;
 
     images.value = imageData;
-    currentImage.value = imageData.length > 0 ? imageData[0].image_url : data.thumbnail_url;
+    currentImage.value = imageData.length > 0 ? imageData[0].image_url : (data.thumbnail_url || '');
 
     updateMetaTags(data, currentImage.value);
   } catch (e) {
     error.value = e.message;
+    toastStore.showToast({ msg: `获取商品详情失败: ${e.message}`, toastType: 'error' });
     console.error('获取商品详情失败:', e.message);
   } finally {
     loading.value = false;
@@ -114,8 +117,8 @@ function handleDelete() {
 }
 async function confirmDeletion() {
   if (product.value) {
-    await productsStore.deleteProduct(product.value.id, product.value.thumbnail_url); // Pass thumbnail for potential cleanup
-    router.push('/shop');
+    const success = await productsStore.deleteProduct(product.value.id);
+    if (success) router.push('/shop');
   }
   isConfirmModalOpen.value = false;
 }
@@ -157,7 +160,7 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
     </div>
     <div v-else-if="error || !product" class="error-state">
       <h2>无法找到商品</h2>
-      <p>您要查找的商品不存在或已被删除。</p>
+      <p>{{ error }}</p>
       <router-link to="/shop" class="cta-button">返回商店</router-link>
     </div>
     <div v-else class="container">
@@ -165,7 +168,7 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
         <span class="toolbar-label">所有者工具</span>
         <div class="toolbar-actions">
           <button @click="handleEdit" class="toolbar-button" title="编辑商品">
-             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
             <span>编辑</span>
           </button>
           <button @click="handleDelete" class="toolbar-button delete" title="删除商品">
@@ -176,47 +179,49 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
       </div>
 
       <div class="back-button-wrapper fade-in-item">
-         <button @click="router.push('/shop')" class="back-button">&larr; 返回商店</button>
+        <button @click="router.push('/shop')" class="back-button">&larr; 返回商店</button>
       </div>
 
-      <article class="content-article">
-        <header class="article-header fade-in-item">
-          <!-- Interactive Image Gallery -->
-          <div v-if="images.length > 0" class="details-gallery">
-            <div class="main-image-wrapper">
-              <img :src="currentImage" :alt="product.name" class="main-image" />
-            </div>
-            <div v-if="images.length > 1" class="thumbnail-grid">
-              <img v-for="img in images" :key="img.id" :src="img.image_url"
-                   :alt="`${product.name} thumbnail ${img.id}`"
-                   class="thumbnail-image"
-                   :class="{ active: currentImage === img.image_url }"
-                   @click="selectImage(img.image_url)" />
-            </div>
+      <!-- ✨ 优化: 整个文章内容由一个新的 .details-layout 容器包裹 -->
+      <div class="details-layout">
+        <!-- ✨ 优化: 图片画廊现在是布局的左侧列 -->
+        <div v-if="images.length > 0" class="gallery-column fade-in-item">
+          <div class="main-image-wrapper">
+            <img :src="currentImage" :alt="product.name" class="main-image" />
           </div>
+          <div v-if="images.length > 1" class="thumbnail-grid">
+            <img v-for="img in images" :key="img.id" :src="img.image_url"
+                 :alt="`${product.name} thumbnail ${img.id}`"
+                 class="thumbnail-image"
+                 :class="{ active: currentImage === img.image_url }"
+                 @click="selectImage(img.image_url)" />
+          </div>
+        </div>
 
-          <div class="text-content" :class="{'with-image': images.length > 0}">
+        <!-- ✨ 优化: 主要内容现在是布局的右侧列 -->
+        <article class="content-column">
+          <header class="article-header fade-in-item">
             <h1 class="product-title">{{ product.name }}</h1>
             <div class="meta-info">
               <p><strong>创建时间:</strong> {{ formattedDate(product.created_at) }}</p>
               <p><strong>最后更新:</strong> {{ lastUpdated }}</p>
             </div>
-          </div>
-        </header>
+          </header>
 
-        <div class="article-body">
-          <div v-for="(block, index) in contentBlocks" :key="index"
-               class="content-block fade-in-item"
-               :style="{ 'transition-delay': `${(index + 2) * 0.1}s` }">
-            <h3 v-if="block.title" class="block-title">{{ block.title }}</h3>
-            <div class="block-content" v-html="block.content"></div>
+          <div class="article-body">
+            <div v-for="(block, index) in contentBlocks" :key="index"
+                 class="content-block fade-in-item"
+                 :style="{ 'transition-delay': `${(index + 2) * 0.1}s` }">
+              <h3 v-if="block.title" class="block-title">{{ block.title }}</h3>
+              <div class="block-content" v-html="block.content"></div>
+            </div>
           </div>
-        </div>
 
-        <footer class="article-footer fade-in-item" :style="{ 'transition-delay': `${(contentBlocks.length + 2) * 0.1}s` }">
-          <button @click="shareProduct" class="cta-button share-button">分享商品</button>
-        </footer>
-      </article>
+          <footer class="article-footer fade-in-item" :style="{ 'transition-delay': `${(contentBlocks.length + 2) * 0.1}s` }">
+            <button @click="shareProduct" class="cta-button share-button">分享商品</button>
+          </footer>
+        </article>
+      </div>
     </div>
 
     <ConfirmModal
@@ -230,9 +235,7 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   </div>
 </template>
 
-
 <style lang="scss" scoped>
-/* All styles remain the same and do not need to be changed. */
 @use '@/assets/styles/index.scss' as *;
 
 // --- Animation ---
@@ -247,15 +250,71 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   padding: 2rem 0 6rem;
 }
 .container {
-  max-width: 900px;
+  max-width: 1200px; /* ✨ 优化: 增加最大宽度以适应分栏布局 */
   margin: 0 auto;
   padding: 0 2rem;
+}
+
+// ✨ 优化: 新增主布局容器
+.details-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 3rem; // 列之间的间距
+}
+
+// ✨ 优化: 左侧画廊列的样式
+.gallery-column {
+  flex: 0 0 40%; // 不拉伸，不压缩，基础宽度为40%
+  max-width: 500px;
+  position: sticky; // 在滚动时固定位置，提升体验
+  top: calc($header-height + 2rem); // 距离顶部导航栏的距离
+}
+.main-image-wrapper {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-background-soft);
+  margin-bottom: 1rem;
+}
+.main-image {
+  width: 100%;
+  display: block;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+.thumbnail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 0.75rem;
+}
+.thumbnail-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  &:hover {
+    border-color: var(--color-primary-light);
+  }
+  &.active {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 10px rgba(var(--color-primary-rgb), 0.5);
+  }
+}
+
+// ✨ 优化: 右侧内容列的样式
+.content-column {
+  flex: 1; // 占据剩余的所有空间
+  min-width: 0; // 防止flex item内容溢出
 }
 
 // --- Owner Toolbar Styles ---
 .owner-toolbar {
   position: sticky;
-  top: calc($header-height + 1rem);
+  top: $header-height;
   z-index: 100;
   display: flex;
   justify-content: space-between;
@@ -268,197 +327,86 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   padding: 0.75rem 1.5rem;
   margin-bottom: 2rem;
   animation: fadeIn 0.5s ease-out;
-
-  .toolbar-label {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--color-primary);
-  }
-  .toolbar-actions {
-    display: flex;
-    gap: 0.5rem;
-  }
+  .toolbar-label { font-size: 0.9rem; font-weight: 600; color: var(--color-primary); }
+  .toolbar-actions { display: flex; gap: 0.5rem; }
   .toolbar-button {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: transparent;
-    border: 1px solid var(--color-border);
-    color: var(--color-text);
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-
-    &:hover {
-      background: var(--color-background-soft);
-      color: var(--color-heading);
-    }
-    &.delete:hover {
-      background: rgba(229, 62, 62, 0.1);
-      border-color: #e53e3e;
-      color: #e53e3e;
-    }
+    display: flex; align-items: center; gap: 0.5rem; background: transparent; border: 1px solid var(--color-border);
+    color: var(--color-text); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s ease;
+    &:hover { background: var(--color-background-soft); color: var(--color-heading); }
+    &.delete:hover { background: rgba(229, 62, 62, 0.1); border-color: #e53e3e; color: #e53e3e; }
   }
 }
 
-.back-button-wrapper {
-  margin-bottom: 2rem;
-}
+.back-button-wrapper { margin-bottom: 2rem; }
 .back-button {
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  &:hover {
-    background: var(--color-background-soft);
-    color: var(--color-heading);
-  }
+  background: none; border: 1px solid var(--color-border); color: var(--color-text); padding: 0.5rem 1rem;
+  border-radius: 8px; cursor: pointer; transition: all 0.2s;
+  &:hover { background: var(--color-background-soft); color: var(--color-heading); }
 }
 
-// --- Hybrid Content Layout Styles ---
-.content-article {
-  width: 100%;
-}
-.article-header {
-  &.with-image {
-    margin-bottom: 3rem;
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid var(--color-border);
-    .hero-image {
-      width: 100%;
-      display: block;
-      aspect-ratio: 16 / 7;
-      object-fit: cover;
-      background-color: var(--color-background-soft);
-    }
-  }
-  &.text-content {
-    text-align: center;
-    &.no-image {
-      margin-bottom: 3rem;
-    }
-  }
-}
+.article-header { margin-bottom: 3rem; }
 .product-title {
-  font-size: 3.5rem;
-  font-weight: 700;
-  color: var(--color-heading);
-  line-height: 1.2;
-  margin-bottom: 1.5rem;
+  font-size: 3rem; font-weight: 700; color: var(--color-heading);
+  line-height: 1.2; margin-bottom: 1.5rem;
 }
 .meta-info {
-  font-size: 0.9rem;
-  color: var(--color-text-dark);
-  display: inline-block;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
+  font-size: 0.9rem; color: var(--color-text-dark); display: inline-block;
+  padding: 0.75rem 1.5rem; border-radius: 8px; border: 1px solid var(--color-border);
   background: var(--color-background-soft);
-  p {
-    margin: 0 0 0.25rem;
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
+  p { margin: 0 0 0.25rem; &:last-child { margin-bottom: 0; } }
 }
-.article-body {
-  margin-top: 4rem;
-}
+
+.article-body { /* margin-top is handled by header's margin-bottom */ }
 .content-block {
   margin-bottom: 3rem;
   .block-title {
-    font-size: 1.8rem;
-    font-weight: 600;
-    color: var(--color-heading);
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--color-border);
-    position: relative;
-    &::before {
-      content: '';
-      position: absolute;
-      bottom: -1px;
-      left: 0;
-      width: 50px;
-      height: 2px;
-      background-color: var(--color-primary);
-    }
+    font-size: 1.8rem; font-weight: 600; color: var(--color-heading); margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem; border-bottom: 1px solid var(--color-border); position: relative;
+    &::before { content: ''; position: absolute; bottom: -1px; left: 0; width: 50px; height: 2px; background-color: var(--color-primary); }
   }
-  .block-content {
-    font-size: 1.15rem;
-    line-height: 2;
-    color: var(--color-text-dark);
-    white-space: pre-wrap;
-  }
+  .block-content { font-size: 1.15rem; line-height: 2; color: var(--color-text-dark); white-space: pre-wrap; }
 }
+
 .article-footer {
-  text-align: center;
-  margin-top: 4rem;
-  padding-top: 2rem;
+  text-align: center; margin-top: 4rem; padding-top: 2rem;
   border-top: 1px solid var(--color-border);
 }
 .cta-button {
-  padding: 0.8rem 2rem;
-  font-size: 1rem;
-  font-weight: 600;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background-color: var(--color-primary);
-  color: #1a1a1a;
-  &:hover {
-    transform: translateY(-2px);
-  }
+  padding: 0.8rem 2rem; font-size: 1rem; font-weight: 600; border-radius: 8px; border: none;
+  cursor: pointer; transition: all 0.2s ease; background-color: var(--color-primary); color: #1a1a1a;
+  &:hover { transform: translateY(-2px); }
 }
 
 // --- Responsive Adjustments ---
+@media (max-width: 992px) { /* ✨ 优化: 调整响应式断点 */
+  .details-layout {
+    flex-direction: column; // 在平板和手机上垂直堆叠
+    gap: 2.5rem;
+  }
+  .gallery-column {
+    flex-basis: auto; // 重置flex-basis
+    width: 100%;
+    max-width: 100%;
+    position: static; // 取消滚动固定
+  }
+}
 @media (max-width: 768px) {
   .container { padding: 0 1rem; }
   .product-title { font-size: 2.5rem; }
-  .article-header.with-image { margin-bottom: 2rem; }
-  .article-body { margin-top: 3rem; }
-  .owner-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
+  .owner-toolbar { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
 }
 
 // --- Loading/Error States ---
 .loading-state, .error-state {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  min-height: 60vh;
-  text-align: center;
-  h2 {
-    font-size: 1.8rem;
-    color: var(--color-heading);
-    margin-bottom: 1rem;
-  }
-  p {
-    font-size: 1.1rem;
-    color: var(--color-text-dark);
-  }
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  min-height: 60vh; text-align: center;
+  h2 { font-size: 1.8rem; color: var(--color-heading); margin-bottom: 1rem; }
+  p { font-size: 1.1rem; color: var(--color-text-dark); max-width: 450px; }
   .spinner {
-    width: 50px;
-    height: 50px;
-    border: 4px solid var(--color-border);
-    border-top-color: var(--color-primary);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 1.5rem;
+    width: 50px; height: 50px; border: 4px solid var(--color-border); border-top-color: var(--color-primary);
+    border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1.5rem;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .cta-button {
-    margin-top: 1.5rem;
-  }
+  .cta-button { margin-top: 1.5rem; }
 }
 </style>
