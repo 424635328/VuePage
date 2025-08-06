@@ -1,3 +1,5 @@
+// src/router/index.js
+
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import HomePage from '../views/HomePage.vue'
@@ -39,7 +41,7 @@ const router = createRouter({
       name: 'product-edit',
       component: () => import('../views/ProductEditPage.vue'),
       meta: { requiresAuth: true },
-      props: true, 
+      props: true,
     },
     {
       path: '/details/:public_id',

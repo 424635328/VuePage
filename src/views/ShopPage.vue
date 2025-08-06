@@ -1,3 +1,5 @@
+<!-- src/views/ShopPage.vue -->
+
 <script setup>
 import { ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';

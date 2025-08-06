@@ -1,3 +1,5 @@
+<!-- src/components/auth/AuthModal.vue -->
+
 <script setup>
 import { ref, reactive, nextTick } from 'vue';
 import { useAuthStore } from '@/stores/auth';

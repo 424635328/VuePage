@@ -114,7 +114,7 @@ onUnmounted(() => {
 }
 
 .app-header.scrolled {
-  padding: 0.75rem 0;
+  padding: 1rem 0;
   background-color: rgba(26, 26, 26, 0.7);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -125,7 +125,6 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: $header-height;
 }
 
 .logo {
@@ -146,7 +145,8 @@ onUnmounted(() => {
   list-style: none;
   margin: 0;
   padding: 0;
-  gap: 2rem;
+  /* [修改] 增加导航项之间的间距，视觉上更开阔 */
+  gap: 2.5rem;
 }
 .desktop-nav a {
   color: var(--color-text);
@@ -175,7 +175,7 @@ onUnmounted(() => {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.25rem; /* [修改] 略微增加操作按钮和汉堡菜单的间距 */
 }
 
 .cta-button {
@@ -183,7 +183,8 @@ onUnmounted(() => {
   background-color: var(--color-primary);
   color: #1a1a1a;
   border: none;
-  padding: 0.6rem 1.2rem;
+  /* [修改] 增加按钮的内边距，使其更易点击，视觉上更均衡 */
+  padding: 0.75rem 1.5rem;
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
@@ -239,12 +240,13 @@ onUnmounted(() => {
   flex-direction: column;
   z-index: 1500;
   ul { list-style: none; padding: 0; text-align: center; }
-  li { margin: 1.5rem 0; }
+  /* [修改] 增加移动端导航项的垂直间距，使其在触摸屏上更易于点击 */
+  li { margin: 2rem 0; }
   a { color: var(--color-heading); font-size: 2rem; font-weight: bold; }
 }
 
 .mobile-cta-item {
-  margin-top: 2.5rem !important;
+  margin-top: 3rem !important; /* [修改] 增加与上方导航项的距离，突出操作按钮 */
 }
 
 .cta-button-mobile {

@@ -1,3 +1,5 @@
+<!-- src/components/shop/ProductCard.vue -->
+
 <script setup>
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -12,9 +14,6 @@ const props = defineProps({
 
 const productsStore = useProductsStore();
 
-// This function is called just before the router navigates away.
-// It stores the complete product object in our Pinia store.
-// The details page will then read from this store for an instant load.
 function prepareForNavigation() {
   productsStore.selectProductForDetailPage(props.product);
 }
@@ -40,11 +39,6 @@ const formattedDate = computed(() => {
       @click="prepareForNavigation"
     >
       <div class="card-image-wrapper">
-        <!--
-          ✨ 最终修复:
-          将 :src 的绑定从 product.image_url 更改为 product.thumbnail_url。
-          这与我们诊断日志中确认的数据字段完全匹配。
-        -->
         <img
           :src="product.thumbnail_url || '/placeholder.svg'"
           :alt="product.name"

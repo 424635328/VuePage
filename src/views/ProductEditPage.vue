@@ -1,3 +1,5 @@
+<!-- src/views/ProductEditPage.vue -->
+
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
@@ -56,8 +58,7 @@ function triggerFileInput() {
   fileInput.value.click();
 }
 
-async function handleFileChange(event) {
-  const files = Array.from(event.target.files);
+async function processFiles(files) {
   if (files.length === 0) return;
 
   const options = {
@@ -88,11 +89,26 @@ async function handleFileChange(event) {
   }
 }
 
+async function handleFileChange(event) {
+  const files = Array.from(event.target.files);
+  await processFiles(files);
+}
+
+// 新增：处理拖拽释放事件
+async function handleDrop(event) {
+  const files = Array.from(event.dataTransfer.files);
+  await processFiles(files);
+}
+
+
 function removeImage(index) {
   const removedImage = images.value.splice(index, 1)[0];
   // If it's a newly added file (transient ID is a string), remove it from the upload queue.
   if (typeof removedImage.id === 'string' && removedImage.id.startsWith('new-')) {
-    newImageFiles.value = newImageFiles.value.filter(file => file.name !== removedImage.id);
+    const imageIndex = newImageFiles.value.findIndex(file => file.name === removedImage.file_name_for_removal);
+    if (imageIndex > -1) {
+      newImageFiles.value.splice(imageIndex, 1);
+    }
   }
 }
 
@@ -167,7 +183,16 @@ onMounted(loadProductForEditing);
               </template>
             </draggable>
 
-            <div class="upload-placeholder" @click="triggerFileInput" role="button" aria-label="添加图片">
+            <!-- 修改：添加拖拽事件监听器 -->
+            <div
+              class="upload-placeholder"
+              @click="triggerFileInput"
+              @dragover.prevent
+              @dragleave.prevent
+              @drop.prevent="handleDrop"
+              role="button"
+              aria-label="添加图片或拖拽图片到此区域"
+            >
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
               <span>添加图片</span>
             </div>
@@ -334,16 +359,17 @@ onMounted(loadProductForEditing);
   align-items: center;
   color: var(--color-text-dark);
   cursor: pointer;
-  transition: border-color 0.2s, color 0.2s;
+  transition: border-color 0.2s, color 0.2s, background-color 0.2s; // 添加背景色过渡
 
   span {
     font-size: 0.9rem;
     margin-top: 0.5rem;
   }
 
-  &:hover {
+  &:hover, &.dragover { // 添加拖拽悬浮时的样式
     border-color: var(--color-primary);
     color: var(--color-primary);
+    background-color: rgba(var(--color-primary-rgb), 0.1);
   }
 }
 .form-actions {
