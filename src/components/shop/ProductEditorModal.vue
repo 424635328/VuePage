@@ -1,3 +1,5 @@
+<!-- src/components/shop/ProductEditorModal.vue -->
+
 <script setup>
 import { ref, watch, computed } from 'vue';
 import { useProductsStore } from '@/stores/products';

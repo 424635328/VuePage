@@ -1,3 +1,5 @@
+// src/stores/auth.js
+
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabaseClient'

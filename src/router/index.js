@@ -1,9 +1,18 @@
+// src/router/index.js
+
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import HomePage from '../views/HomePage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+   scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    } else {
+      return { top: 0 }
+    }
+  },
   routes: [
     {
       path: '/',
@@ -19,6 +28,13 @@ const router = createRouter({
       path: '/contact',
       name: 'contact',
       component: () => import('../views/ContactPage.vue'),
+    },
+    {
+      path: '/details/:id',
+      name: 'product-details',
+      component: () => import('../views/ProductDetailsPage.vue'),
+      meta: { requiresAuth: true },
+      props: true,
     },
     {
       path: '/shop',
