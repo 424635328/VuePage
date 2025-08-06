@@ -1,0 +1,18 @@
+<svg width="400" height="200" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" preserveAspectRatio="none">
+  <defs>
+    <style type="text/css">
+      #holder_189c8a45d0f text { 
+        fill: #999; 
+        font-weight: bold; 
+        font-family: Arial, Helvetica, Open Sans, sans-serif, monospace; 
+        font-size: 20pt; 
+      }
+    </style>
+  </defs>
+  <g id="holder_189c8a45d0f">
+    <rect width="400" height="200" fill="#333"></rect>
+    <g>
+      <text x="147.5" y="109">No Image</text>
+    </g>
+  </g>
+</svg>

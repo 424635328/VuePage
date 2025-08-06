@@ -1,18 +1,32 @@
 <!-- src/components/AppHeader.vue -->
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import AuthModal from '@/components/auth/AuthModal.vue'
+
+const authStore = useAuthStore()
+const route = useRoute()
 
 const isMobileMenuOpen = ref(false)
+const isAuthModalOpen = ref(false)
+
 const toggleMobileMenu = () => {
   isMobileMenuOpen.value = !isMobileMenuOpen.value
+}
+
+const closeMobileMenu = () => {
+  isMobileMenuOpen.value = false
 }
 
 const isScrolled = ref(false)
 const handleScroll = () => {
   isScrolled.value = window.scrollY > 10
 }
+
+// 根据当前路由判断是否在 Shop 页面
+const isOnShopPage = computed(() => route.name === 'shop')
 
 onMounted(() => {
   window.addEventListener('scroll', handleScroll)
@@ -25,21 +39,31 @@ onUnmounted(() => {
 <template>
   <header class="app-header" :class="{ scrolled: isScrolled }">
     <div class="container header-content">
-      <RouterLink to="/" class="logo" @click="isMobileMenuOpen = false">
+      <RouterLink to="/" class="logo" @click="closeMobileMenu">
         <img src="/LOGO.jpeg" alt="公司 Logo" />
-        <span>YourBrand</span>
+        <span>MHStudio</span>
       </RouterLink>
 
       <nav class="desktop-nav">
         <ul>
           <li><RouterLink to="/">首页</RouterLink></li>
           <li><RouterLink to="/projects">产品</RouterLink></li>
+          <li><RouterLink to="/shop">商店</RouterLink></li>
           <li><RouterLink to="/contact">联系我们</RouterLink></li>
         </ul>
       </nav>
 
       <div class="header-actions">
-        <RouterLink to="/contact" class="cta-button">立即咨询</RouterLink>
+        <!-- 桌面端的认证按钮 -->
+        <template v-if="isOnShopPage">
+          <button v-if="authStore.user" @click="authStore.signOut()" class="cta-button auth-button">
+            注销
+          </button>
+          <button v-else @click="isAuthModalOpen = true" class="cta-button auth-button">
+            登录
+          </button>
+        </template>
+        <RouterLink v-else to="/contact" class="cta-button">立即咨询</RouterLink>
 
         <button class="hamburger" @click="toggleMobileMenu" aria-label="打开菜单" :aria-expanded="isMobileMenuOpen">
           <span class="bar"></span>
@@ -49,26 +73,36 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- 移动端导航 -->
     <transition name="slide-fade">
       <nav v-if="isMobileMenuOpen" class="mobile-nav">
         <ul>
           <li><RouterLink to="/" @click="toggleMobileMenu">首页</RouterLink></li>
           <li><RouterLink to="/projects" @click="toggleMobileMenu">产品</RouterLink></li>
+          <li><RouterLink to="/shop" @click="toggleMobileMenu">商店</RouterLink></li>
           <li><RouterLink to="/contact" @click="toggleMobileMenu">联系我们</RouterLink></li>
           <li class="mobile-cta-item">
-            <RouterLink to="/contact" class="cta-button-mobile" @click="toggleMobileMenu">
+             <template v-if="isOnShopPage">
+                <button v-if="authStore.user" @click="authStore.signOut(); closeMobileMenu();" class="cta-button-mobile">注销</button>
+                <button v-else @click="isAuthModalOpen = true; closeMobileMenu();" class="cta-button-mobile">登录</button>
+             </template>
+             <RouterLink v-else to="/contact" class="cta-button-mobile" @click="toggleMobileMenu">
               立即咨询
             </RouterLink>
           </li>
         </ul>
       </nav>
     </transition>
+
+    <!-- 认证模态框 -->
+    <AuthModal v-model:active="isAuthModalOpen" />
   </header>
 </template>
 
 <style lang="scss" scoped>
 @use '@/assets/styles/index.scss' as *;
 
+/* 保持原有样式... */
 .app-header {
   position: sticky;
   top: 0;
@@ -144,9 +178,8 @@ onUnmounted(() => {
   gap: 1rem;
 }
 
-/* 这个样式现在会同时作用于 button 和 router-link */
 .cta-button {
-  display: inline-block; /* 确保 router-link 表现得像个按钮 */
+  display: inline-block;
   background-color: var(--color-primary);
   color: #1a1a1a;
   border: none;
@@ -158,6 +191,17 @@ onUnmounted(() => {
   &:hover {
     background-color: var(--color-primary-dark);
   }
+}
+
+.auth-button {
+    background-color: transparent;
+    border: 1px solid var(--color-primary);
+    color: var(--color-primary);
+
+    &:hover {
+        background-color: var(--color-primary);
+        color: #1a1a1a;
+    }
 }
 
 .hamburger {
@@ -200,10 +244,9 @@ onUnmounted(() => {
 }
 
 .mobile-cta-item {
-  margin-top: 2.5rem !important; /* 与其他链接拉开距离 */
+  margin-top: 2.5rem !important;
 }
 
-/* 移动端的按钮式链接 */
 .cta-button-mobile {
   display: inline-block;
   background: var(--color-primary);
@@ -213,6 +256,8 @@ onUnmounted(() => {
   font-size: 1.5rem;
   border-radius: 12px;
   font-weight: 600;
+  min-width: 150px;
+  text-align: center;
 }
 
 .slide-fade-enter-active,
@@ -226,7 +271,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: $breakpoint-md) {
-  .desktop-nav, .cta-button {
+  .desktop-nav, .header-actions .cta-button {
     display: none;
   }
   .hamburger {

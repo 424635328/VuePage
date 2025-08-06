@@ -6,7 +6,7 @@
       <div class="footer-column brand-info">
         <div class="logo">
           <img src="/LOGO.jpeg" alt="公司 Logo" />
-          <span>YourBrand</span>
+          <span>MHStudio</span>
         </div>
         <p>致力于提供领先的数字化解决方案，驱动行业创新。</p>
       </div>
@@ -38,7 +38,7 @@
       </div>
     </div>
     <div class="container footer-bottom">
-      <p>© {{ new Date().getFullYear() }} YourBrand Inc. 保留所有权利。</p>
+      <p>© {{ new Date().getFullYear() }} MHStudio Inc. 保留所有权利。</p>
       <div class="legal-links">
         <a href="#">隐私政策</a>
         <a href="#">服务条款</a>
