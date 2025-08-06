@@ -135,26 +135,43 @@ const getParallaxStyle = (strength) => computed(() => ({
       <div class="scanline-container"><div class="screen-scanline"></div></div>
 
       <!-- --- 极光动态光球 (v-motion) --- -->
-      <!-- **视觉优化**: 调整了极光动画，使其更柔和，颜色亮度更低，氛围感更强 -->
+      <!-- [终极修复] 移除了所有 aurora-blob 动画中的 opacity 变化，只保留平滑的位移、旋转和缩放 -->
       <div
         class="aurora-blob-1"
         v-motion="{
-          initial: { opacity: 0.1, scale: 0.9, x: '-30%', y: '-40%' },
-          enter: { x: ['-35%', '25%', '-35%'], y: ['-45%', '15%', '-45%'], rotate: [0, 15, 0], opacity: [0.1, 0.2, 0.1], scale: [0.9, 1.05, 0.9], transition: { duration: 45, ease: 'easeInOut', repeat: Infinity, repeatType: 'mirror' } }
+          initial: { opacity: 0.15, scale: 0.9, x: '-30%', y: '-40%' },
+          enter: {
+            x: ['-35%', '25%', '-35%'],
+            y: ['-45%', '15%', '-45%'],
+            rotate: [0, 15, 0],
+            scale: [0.9, 1.05, 0.9],
+            transition: { duration: 45, ease: 'easeInOut', repeat: Infinity, repeatType: 'mirror' }
+          }
         }"
       ></div>
        <div
         class="aurora-blob-2"
         v-motion="{
-          initial: { opacity: 0.05, x: '30%', y: '30%' },
-          enter: { x: ['35%', '-15%', '35%'], y: ['35%', '-35%', '35%'], rotate: [10, -5, 10], opacity: [0.15, 0.05, 0.15], scale: [1.05, 0.85, 1.05], transition: { duration: 55, ease: 'easeInOut', repeat: Infinity, repeatType: 'mirror', delay: 4 } }
+          initial: { opacity: 0.1, x: '30%', y: '30%' },
+          enter: {
+            x: ['35%', '-15%', '35%'],
+            y: ['35%', '-35%', '35%'],
+            rotate: [10, -5, 10],
+            scale: [1.05, 0.85, 1.05],
+            transition: { duration: 55, ease: 'easeInOut', repeat: Infinity, repeatType: 'mirror', delay: 4 }
+          }
         }"
       ></div>
       <div
         class="aurora-blob-3"
         v-motion="{
-          initial: { opacity: 0 },
-          enter: { x: '15%', y: '15%', opacity: [0, 0.08, 0.1, 0], scale: [1, 1.15, 1], transition: { duration: 30, repeat: Infinity, repeatType: 'reverse', delay: 10 } }
+          initial: { opacity: 0.08, x: '15%', y: '15%' },
+          enter: {
+            x: ['15%', '-10%', '15%'],
+            y: ['15%', '30%', '15%'],
+            scale: [1, 1.1, 1],
+            transition: { duration: 60, ease: 'easeInOut', repeat: Infinity, repeatType: 'mirror', delay: 8 }
+          }
         }"
       ></div>
 
@@ -224,15 +241,47 @@ const getParallaxStyle = (strength) => computed(() => ({
 
 <style lang="scss" scoped>
 /* ============================================================================
- * Keyframes (动画关键帧) - 无变动
+ * Keyframes (动画关键帧)
  * ============================================================================ */
 @keyframes fall { from { transform: translateY(-20vh) scaleX(1); } to { transform: translateY(120vh) scaleX(0.5); opacity: 0; } }
-@keyframes flicker { 0%,18%,22%,25%,53%,57%,100%{opacity:1;text-shadow:0 0 4px #ff00de,0 0 8px #ff00de,0 0 16px #ff00de,0 0 32px #ff00de} 20%,24%,55%{opacity:.8;text-shadow:none} }
+
+/* [修复] 优化霓虹灯闪烁动画，使其更柔和，不再剧烈闪烁 */
+@keyframes flicker {
+  0%, 90% {
+    opacity: 1;
+    text-shadow:
+      0 0 4px #ff00de, 0 0 8px #ff00de,
+      0 0 16px #ff00de, 0 0 32px #ff00de;
+  }
+  92% { opacity: 0.9; text-shadow: 0 0 4px #ff00de, 0 0 8px #ff00de; }
+  95% { opacity: 0.8; text-shadow: none; }
+  100% {
+    opacity: 1;
+    text-shadow:
+      0 0 4px #ff00de, 0 0 8px #ff00de,
+      0 0 16px #ff00de, 0 0 32px #ff00de;
+  }
+}
+
 @keyframes riseAndFade { from { transform: translateY(0) scale(1); opacity: 0.3; } to { transform: translateY(-100px) scale(1.6); opacity: 0; } }
-@keyframes lightningFlash { 0%,98%{opacity:0} 98.1%,98.3%,98.6%{opacity:.3} 98.2%,98.5%{opacity:0} 100%{opacity:0} } // 降低闪电亮度
+
+/* [修复] 优化闪电动画，使其以4秒为周期，进行一次柔和、短暂的闪光 */
+@keyframes lightningFlash {
+  0%, 96% { opacity: 0; }
+  97% { opacity: 0.1; } /* 调整亮度，0.1表示非常微弱的闪光 */
+  98%, 100% { opacity: 0; }
+}
+
 @keyframes ripple { from { width: 0; height: 0; opacity: 0.7; } to { width: 100px; height: 50px; opacity: 0; } }
 @keyframes scanline { 0% { transform: translateY(-10%); } 100% { transform: translateY(110vh); } }
-@keyframes glitchFlicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* [修复] 优化角落乱码的闪烁动画，降低闪烁强度 */
+@keyframes glitchFlicker {
+  0%, 97% { opacity: 1; }
+  98% { opacity: 0.5; } /* 从 0.3 提高到 0.5，更柔和 */
+  100% { opacity: 1; }
+}
+
 @keyframes twinkle { 0%, 100% { opacity: 0; } 50% { opacity: 0.7; } }
 @keyframes orb-pulse {
   0%, 100% { transform: scale(1); opacity: 0.7; }
@@ -249,7 +298,7 @@ const getParallaxStyle = (strength) => computed(() => ({
   right: 0;
   bottom: 0;
   z-index: -1;
-  background-color: #06040f; // 添加一个基础背景色，防止闪烁
+  background-color: #06040f;
 }
 
 .aurora-wrapper {
@@ -261,7 +310,6 @@ const getParallaxStyle = (strength) => computed(() => ({
   isolation: isolate;
 }
 
-// **性能优化**: 对所有绝对定位的、会移动的图层添加 will-change
 .black-hole-gradient, .star-dust, .lightning-flash-overlay, .scanline-container, .stars-layer, .cyberpunk-effects-layer, .parallax-layers {
   position: absolute;
   inset: 0;
@@ -275,17 +323,23 @@ const getParallaxStyle = (strength) => computed(() => ({
   z-index: 10;
   height: 100%;
   width: 100%;
-  overflow-y: auto; // 允许内容滚动
+  overflow-y: auto;
 }
 
 /* ============================================================================
  * 特效图层样式
  * ============================================================================ */
+/* [新增] 为闪电图层应用动画 */
+.lightning-flash-overlay {
+  animation: lightningFlash 4s linear infinite;
+  z-index: 0; /* 确保在最底层 */
+}
+
 // 极光光球 (Aurora Blobs)
 .aurora-blob-1, .aurora-blob-2, .aurora-blob-3 {
   position: absolute;
   border-radius: 9999px;
-  filter: blur(80px); // 稍微增加模糊，使其更柔和
+  filter: blur(80px);
   will-change: transform, opacity;
 }
 .aurora-blob-1 {
@@ -315,7 +369,7 @@ const getParallaxStyle = (strength) => computed(() => ({
 .glass-shard {
   position: absolute;
   inset: 0;
-  backdrop-filter: blur(20px) brightness(1.2); // 调整模糊和亮度
+  backdrop-filter: blur(20px) brightness(1.2);
   background-color: rgba(255, 255, 255, 0.04);
   border-radius: 1rem;
   box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3);
@@ -338,7 +392,7 @@ const getParallaxStyle = (strength) => computed(() => ({
 }
 .orb-glow {
   position: absolute;
-  inset: -50%; // 扩大光晕范围
+  inset: -50%;
   border-radius: 9999px;
   animation: orb-pulse 8s ease-in-out infinite alternate;
 }
@@ -364,7 +418,7 @@ const getParallaxStyle = (strength) => computed(() => ({
   font-size: 3rem;
   font-weight: 700;
   color: #fff;
-  animation: flicker 4s linear infinite; // 动画更平滑
+  animation: flicker 4s linear infinite; /* [修复] 动画现在指向柔和的 flicker keyframes */
   user-select: none;
   z-index: 5;
   @media (max-width: 768px) { font-size: 2rem; }
@@ -401,7 +455,7 @@ const getParallaxStyle = (strength) => computed(() => ({
   user-select: none;
   span {
     display: inline-block;
-    animation: glitchFlicker 2s infinite;
+    animation: glitchFlicker 2s infinite; /* [修复] 动画现在指向柔和的 glitchFlicker keyframes */
   }
 }
 
