@@ -47,9 +47,10 @@ onUnmounted(() => {
       <nav class="desktop-nav">
         <ul>
           <li><RouterLink to="/">首页</RouterLink></li>
-          <li><RouterLink to="/projects">产品</RouterLink></li>
           <li><RouterLink to="/shop">商店</RouterLink></li>
-          <li><RouterLink to="/contact">联系我们</RouterLink></li>
+          <li><RouterLink to="/projects">产品</RouterLink></li>
+
+          <!-- <li><RouterLink to="/contact">联系我们</RouterLink></li> -->
         </ul>
       </nav>
 
@@ -108,13 +109,13 @@ onUnmounted(() => {
   top: 0;
   width: 100%;
   z-index: 1000;
-  padding: 1rem 0;
+  padding: 0.75rem 0;
   transition: background-color 0.3s ease, backdrop-filter 0.3s ease, border-bottom 0.3s ease, padding 0.3s ease;
   border-bottom: 1px solid transparent;
 }
 
 .app-header.scrolled {
-  padding: 1rem 0;
+  padding: 0.5rem 0;
   background-color: rgba(26, 26, 26, 0.7);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
