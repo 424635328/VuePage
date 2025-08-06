@@ -1,22 +1,25 @@
+<!-- src/views/ProductDetailsPage.vue -->
+
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { supabase } from '@/lib/supabaseClient';
 import { useAuthStore } from '@/stores/auth';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
-import ProductEditorModal from '@/components/shop/ProductEditorModal.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
+import { supabase } from '@/lib/supabaseClient';
 
 const props = defineProps({
-  id: {
+  public_id: {
     type: String,
     required: true,
   },
 });
 
 const product = ref(null);
+const images = ref([]); // To store all images for the gallery
+const currentImage = ref(''); // The currently displayed large image
 const loading = ref(true);
 const error = ref(null);
 
@@ -24,93 +27,95 @@ const router = useRouter();
 const authStore = useAuthStore();
 const productsStore = useProductsStore();
 const toastStore = useToastStore();
-
 const { user } = storeToRefs(authStore);
 
-// State for modals
-const isEditorOpen = ref(false);
 const isConfirmModalOpen = ref(false);
+const isOwner = computed(() => user.value && product.value && user.value.id === product.value.user_id);
 
-// Computed property to check if the current user is the owner
-const isOwner = computed(() => {
-  return user.value && product.value && user.value.id === product.value.user_id;
-});
-
-// Advanced Content Parsing Algorithm
 const contentBlocks = computed(() => {
-  if (!product.value?.description) {
-    return [];
-  }
+  if (!product.value?.description) return [];
   const rawText = product.value.description;
   const parts = rawText.split(/\n### /);
-
   const blocks = [];
-
   if (parts[0] && !parts[0].startsWith('### ')) {
       const mainDesc = parts.shift().trim();
-      if(mainDesc) {
-        blocks.push({
-            title: null,
-            content: mainDesc.replace(/^- /gm, '• ').replace(/\n/g, '<br />')
-        });
-      }
+      if(mainDesc) blocks.push({ title: null, content: mainDesc.replace(/^- /gm, '• ').replace(/\n/g, '<br />') });
   }
-
   parts.forEach(part => {
     const lines = part.split('\n');
     const title = lines.shift()?.trim();
-    const content = lines.join('\n').trim()
-                         .replace(/^- /gm, '• ')
-                         .replace(/\n/g, '<br />');
-    if (title && content) {
-        blocks.push({ title, content });
-    }
+    const content = lines.join('\n').trim().replace(/^- /gm, '• ').replace(/\n/g, '<br />');
+    if (title && content) blocks.push({ title, content });
   });
-
   return blocks;
 });
 
-async function fetchProductDetails() {
+function updateMetaTags(productData, firstImage) {
+  document.title = `${productData.name} | MHShop`;
+  const updateOrCreateMeta = (property, content) => {
+    let el = document.querySelector(`meta[property='${property}']`);
+    if (!el) {
+      el = document.createElement('meta');
+      el.setAttribute('property', property);
+      document.head.appendChild(el);
+    }
+    el.setAttribute('content', content || '');
+  };
+  const descriptionText = productData.description.split(/\n### /)[0].substring(0, 150) + '...';
+  const imageUrl = firstImage || productData.thumbnail_url || `${window.location.origin}/LOGO.jpeg`;
+  updateOrCreateMeta('og:title', productData.name);
+  updateOrCreateMeta('og:description', descriptionText);
+  updateOrCreateMeta('og:image', imageUrl);
+  updateOrCreateMeta('og:url', window.location.href);
+  updateOrCreateMeta('og:type', 'website');
+}
+
+async function loadProductData() {
   loading.value = true;
   error.value = null;
+  // We always fetch from API now to get the associated images,
+  // the "state-first" approach is more complex with related data.
   try {
-    const { data, error: fetchError } = await supabase
-      .from('products').select('*').eq('id', props.id).single();
-    if (fetchError) {
-      // Handle case where product is not found gracefully
-      if (fetchError.code === 'PGRST116') {
-        product.value = null;
-        throw new Error('商品未找到。');
-      }
-      throw fetchError;
+    const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-product-details?id=${props.public_id}`;
+    const response = await fetch(functionUrl);
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `服务器错误: ${response.status}`);
     }
+    const data = await response.json();
     product.value = data;
+
+    // Fetch images for the gallery
+    const { data: imageData, error: imageError } = await supabase
+      .from('product_images').select('id, image_url').eq('product_id', data.id).order('position');
+    if (imageError) throw imageError;
+
+    images.value = imageData;
+    currentImage.value = imageData.length > 0 ? imageData[0].image_url : data.thumbnail_url;
+
+    updateMetaTags(data, currentImage.value);
   } catch (e) {
     error.value = e.message;
-    console.error('Error fetching product details:', e.message);
+    console.error('获取商品详情失败:', e.message);
   } finally {
     loading.value = false;
   }
 }
 
-// Function called by the editor modal's 'product-updated' event
-function onProductUpdated() {
-  fetchProductDetails();
+function selectImage(url) {
+  currentImage.value = url;
 }
 
-// Handlers for the owner's toolbar
 function handleEdit() {
-  isEditorOpen.value = true;
+  router.push({ name: 'product-edit', params: { public_id: product.value.public_id } });
 }
-
 function handleDelete() {
   isConfirmModalOpen.value = true;
 }
-
 async function confirmDeletion() {
   if (product.value) {
-    await productsStore.deleteProduct(product.value.id, product.value.image_url);
-    router.push('/shop'); // Navigate away after deletion
+    await productsStore.deleteProduct(product.value.id, product.value.thumbnail_url); // Pass thumbnail for potential cleanup
+    router.push('/shop');
   }
   isConfirmModalOpen.value = false;
 }
@@ -118,54 +123,49 @@ async function confirmDeletion() {
 async function shareProduct() {
   const shareData = {
     title: product.value.name,
-    text: product.value.description.split(/\n### /)[0], // Share only the main description
+    text: product.value.description.split(/\n### /)[0],
     url: window.location.href,
   };
   try {
-    if (navigator.share) {
-      await navigator.share(shareData);
-    } else {
+    if (navigator.share) await navigator.share(shareData);
+    else {
       await navigator.clipboard.writeText(window.location.href);
       toastStore.showToast({ msg: '链接已复制到剪贴板' });
     }
   } catch (err) {
-    if (err.name !== 'AbortError') { // Ignore user cancellation of the share dialog
+    if (err.name !== 'AbortError') {
       console.error('Share failed:', err);
       toastStore.showToast({ msg: '分享失败', toastType: 'error' });
     }
   }
 }
 
-onMounted(fetchProductDetails);
+onMounted(loadProductData);
+onUnmounted(() => {
+  productsStore.selectProductForDetailPage(null);
+});
 
-// Helper functions for formatting dates
 const formattedDate = (d) => d ? new Date(d).toLocaleString('zh-CN', { dateStyle: 'long', timeStyle: 'short' }) : 'N/A';
 const lastUpdated = computed(() => product.value ? formattedDate(product.value.updated_at || product.value.created_at) : '');
 </script>
 
 <template>
   <div class="details-page">
-    <!-- Loading State -->
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
       <p>正在加载商品详情...</p>
     </div>
-
-    <!-- Error State -->
     <div v-else-if="error || !product" class="error-state">
       <h2>无法找到商品</h2>
       <p>您要查找的商品不存在或已被删除。</p>
       <router-link to="/shop" class="cta-button">返回商店</router-link>
     </div>
-
-    <!-- Main Content -->
     <div v-else class="container">
-      <!-- Owner's Toolbar -->
       <div v-if="isOwner" class="owner-toolbar">
         <span class="toolbar-label">所有者工具</span>
         <div class="toolbar-actions">
           <button @click="handleEdit" class="toolbar-button" title="编辑商品">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
             <span>编辑</span>
           </button>
           <button @click="handleDelete" class="toolbar-button delete" title="删除商品">
@@ -179,23 +179,31 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
          <button @click="router.push('/shop')" class="back-button">&larr; 返回商店</button>
       </div>
 
-      <!-- Hybrid Content Layout -->
       <article class="content-article">
-        <!-- 1. Hero Image (if it exists) -->
-        <header v-if="product.image_url" class="article-header with-image fade-in-item">
-          <img :src="product.image_url" :alt="product.name" class="hero-image" @error.once="e => e.target.style.display='none'" />
+        <header class="article-header fade-in-item">
+          <!-- Interactive Image Gallery -->
+          <div v-if="images.length > 0" class="details-gallery">
+            <div class="main-image-wrapper">
+              <img :src="currentImage" :alt="product.name" class="main-image" />
+            </div>
+            <div v-if="images.length > 1" class="thumbnail-grid">
+              <img v-for="img in images" :key="img.id" :src="img.image_url"
+                   :alt="`${product.name} thumbnail ${img.id}`"
+                   class="thumbnail-image"
+                   :class="{ active: currentImage === img.image_url }"
+                   @click="selectImage(img.image_url)" />
+            </div>
+          </div>
+
+          <div class="text-content" :class="{'with-image': images.length > 0}">
+            <h1 class="product-title">{{ product.name }}</h1>
+            <div class="meta-info">
+              <p><strong>创建时间:</strong> {{ formattedDate(product.created_at) }}</p>
+              <p><strong>最后更新:</strong> {{ lastUpdated }}</p>
+            </div>
+          </div>
         </header>
 
-        <!-- 2. Main Title & Meta -->
-        <div class="article-header text-content fade-in-item" :class="{'no-image': !product.image_url}">
-          <h1 class="product-title">{{ product.name }}</h1>
-          <div class="meta-info">
-            <p><strong>创建时间:</strong> {{ formattedDate(product.created_at) }}</p>
-            <p><strong>最后更新:</strong> {{ lastUpdated }}</p>
-          </div>
-        </div>
-
-        <!-- 3. Parsed Content Blocks -->
         <div class="article-body">
           <div v-for="(block, index) in contentBlocks" :key="index"
                class="content-block fade-in-item"
@@ -205,21 +213,12 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
           </div>
         </div>
 
-        <!-- 4. Final Actions -->
         <footer class="article-footer fade-in-item" :style="{ 'transition-delay': `${(contentBlocks.length + 2) * 0.1}s` }">
           <button @click="shareProduct" class="cta-button share-button">分享商品</button>
         </footer>
       </article>
     </div>
 
-    <!-- Modals -->
-    <ProductEditorModal
-      v-if="product"
-      v-model:active="isEditorOpen"
-      :product="product"
-      @close="isEditorOpen = false"
-      @product-updated="onProductUpdated"
-    />
     <ConfirmModal
       :show="isConfirmModalOpen"
       title="确认删除商品"
@@ -231,7 +230,9 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   </div>
 </template>
 
+
 <style lang="scss" scoped>
+/* All styles remain the same and do not need to be changed. */
 @use '@/assets/styles/index.scss' as *;
 
 // --- Animation ---
@@ -254,6 +255,7 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
 // --- Owner Toolbar Styles ---
 .owner-toolbar {
   position: sticky;
+  top: calc($header-height + 1rem);
   z-index: 100;
   display: flex;
   justify-content: space-between;
@@ -321,7 +323,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
 .content-article {
   width: 100%;
 }
-
 .article-header {
   &.with-image {
     margin-bottom: 3rem;
@@ -343,7 +344,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
     }
   }
 }
-
 .product-title {
   font-size: 3.5rem;
   font-weight: 700;
@@ -351,7 +351,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   line-height: 1.2;
   margin-bottom: 1.5rem;
 }
-
 .meta-info {
   font-size: 0.9rem;
   color: var(--color-text-dark);
@@ -367,14 +366,11 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
     }
   }
 }
-
 .article-body {
   margin-top: 4rem;
 }
-
 .content-block {
   margin-bottom: 3rem;
-
   .block-title {
     font-size: 1.8rem;
     font-weight: 600;
@@ -383,7 +379,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
     padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--color-border);
     position: relative;
-
     &::before {
       content: '';
       position: absolute;
@@ -394,7 +389,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
       background-color: var(--color-primary);
     }
   }
-
   .block-content {
     font-size: 1.15rem;
     line-height: 2;
@@ -402,14 +396,12 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
     white-space: pre-wrap;
   }
 }
-
 .article-footer {
   text-align: center;
   margin-top: 4rem;
   padding-top: 2rem;
   border-top: 1px solid var(--color-border);
 }
-
 .cta-button {
   padding: 0.8rem 2rem;
   font-size: 1rem;

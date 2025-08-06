@@ -1,80 +1,72 @@
-<!-- src/views/ShopPage.vue -->
-
 <script setup>
-import { ref, watch, onMounted } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useAuthStore } from '@/stores/auth'
-import { useProductsStore } from '@/stores/products'
-import { useToastStore } from '@/stores/toast'
-import ProductCard from '@/components/shop/ProductCard.vue'
-import ProductEditorModal from '@/components/shop/ProductEditorModal.vue'
-import FloatingActions from '@/components/shop/FloatingActions.vue'
-import AuthModal from '@/components/auth/AuthModal.vue'
-import ConfirmModal from '@/components/common/ConfirmModal.vue' // Import the new component
+import { ref, watch, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
+import { useAuthStore } from '@/stores/auth';
+import { useProductsStore } from '@/stores/products';
+import { useToastStore } from '@/stores/toast';
+import ProductCard from '@/components/shop/ProductCard.vue';
+import FloatingActions from '@/components/shop/FloatingActions.vue';
+import AuthModal from '@/components/auth/AuthModal.vue';
+import ConfirmModal from '@/components/common/ConfirmModal.vue';
 
-const authStore = useAuthStore()
-const { user, loading: authLoading } = storeToRefs(authStore)
+const authStore = useAuthStore();
+const { user, loading: authLoading } = storeToRefs(authStore);
 
-const productsStore = useProductsStore()
-const { products, loading: productsLoading, error } = storeToRefs(productsStore)
+const productsStore = useProductsStore();
+const { products, loading: productsLoading, error } = storeToRefs(productsStore);
 
-const toastStore = useToastStore()
+const toastStore = useToastStore();
+const router = useRouter();
 
 // State for modals
-const isEditorOpen = ref(false)
-const isAuthModalOpen = ref(false)
-const isConfirmModalOpen = ref(false) // State for the confirmation modal
+const isAuthModalOpen = ref(false);
+const isConfirmModalOpen = ref(false);
 
 // State for data being acted upon
-const productToEdit = ref(null)
-const productToDelete = ref(null) // State to hold the product targeted for deletion
+const productToDelete = ref(null);
 
 // Watcher for login/logout events
 watch(user, (newUser, oldUser) => {
   if (newUser && !oldUser) {
-    isAuthModalOpen.value = false
-    productsStore.fetchProducts()
+    isAuthModalOpen.value = false;
+    productsStore.fetchProducts();
   } else if (!newUser && oldUser) {
-    productsStore.clearProducts()
+    productsStore.clearProducts();
   }
-})
+});
 
 // onMounted hook to handle initial page load
 onMounted(() => {
   if (user.value) {
-    productsStore.fetchProducts()
+    productsStore.fetchProducts();
   }
-})
+});
 
 function handleAddProduct() {
-  productToEdit.value = null
-  isEditorOpen.value = true
+  router.push({ name: 'product-new' });
 }
 
 function handleEditProduct(product) {
-  productToEdit.value = product
-  isEditorOpen.value = true
+  router.push({ name: 'product-edit', params: { public_id: product.public_id } });
 }
 
-// UPDATED: This function now opens the confirmation modal instead of deleting directly.
 function handleDeleteProduct(product) {
-  productToDelete.value = product; // Store the product to be deleted
-  isConfirmModalOpen.value = true; // Open the modal
+  productToDelete.value = product;
+  isConfirmModalOpen.value = true;
 }
 
-// NEW: This function is called when the user confirms the deletion from the modal.
+// ✨ FIX: The call to deleteProduct now only passes the product's ID.
 async function confirmDeletion() {
   if (productToDelete.value) {
-    await productsStore.deleteProduct(productToDelete.value.id, productToDelete.value.image_url);
+    await productsStore.deleteProduct(productToDelete.value.id);
   }
-  // Close the modal and reset the state regardless of the outcome
   isConfirmModalOpen.value = false;
   productToDelete.value = null;
 }
 
-// Enterprise-grade Share Strategy: Copy direct link to clipboard.
 async function handleCopyLink(product) {
-  const productUrl = `${window.location.origin}/details/${product.id}`;
+  const productUrl = `${window.location.origin}/details/${product.public_id}`;
   try {
     await navigator.clipboard.writeText(productUrl);
     toastStore.showToast({ msg: '商品链接已复制到剪贴板' });
@@ -156,14 +148,7 @@ function onLoggedIn() {
 
     <!-- Floating Actions & Modals -->
     <FloatingActions v-if="user" @add="handleAddProduct" />
-    <ProductEditorModal
-      v-model:active="isEditorOpen"
-      :product="productToEdit"
-      @close="isEditorOpen = false"
-    />
     <AuthModal v-model:active="isAuthModalOpen" @loggedIn="onLoggedIn" />
-
-    <!-- The new Confirmation Modal for deletions -->
     <ConfirmModal
       :show="isConfirmModalOpen"
       title="确认删除商品"
@@ -176,7 +161,7 @@ function onLoggedIn() {
 </template>
 
 <style lang="scss" scoped>
-/* All previous styles are correct and do not need to be changed. */
+/* All styles remain the same and do not need to be changed. */
 @use '@/assets/styles/index.scss' as *;
 // --- Animation Keyframes ---
 @keyframes fadeIn {

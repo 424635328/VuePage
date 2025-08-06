@@ -4,7 +4,7 @@ import HomePage from '../views/HomePage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-   scrollBehavior(to, from, savedPosition) {
+  scrollBehavior(to, from, savedPosition) {
     if (savedPosition) {
       return savedPosition
     } else {
@@ -23,32 +23,43 @@ const router = createRouter({
       component: () => import('../views/ProjectsPage.vue'),
     },
     {
+      path: '/shop',
+      name: 'shop',
+      component: () => import('../views/ShopPage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/shop/new',
+      name: 'product-new',
+      component: () => import('../views/ProductEditPage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/shop/edit/:public_id',
+      name: 'product-edit',
+      component: () => import('../views/ProductEditPage.vue'),
+      meta: { requiresAuth: true },
+      props: true, 
+    },
+    {
+      path: '/details/:public_id',
+      name: 'product-details',
+      component: () => import('../views/ProductDetailsPage.vue'),
+      props: true,
+    },
+    {
       path: '/contact',
       name: 'contact',
       component: () => import('../views/ContactPage.vue'),
     },
-    {
-      path: '/details/:id',
-      name: 'product-details',
-      component: () => import('../views/ProductDetailsPage.vue'),
-      // ✨ UPDATED: The meta field has been removed to make this route public.
-      // meta: { requiresAuth: true },
-      props: true,
-    },
-    {
-      path: '/shop',
-      name: 'shop',
-      component: () => import('../views/ShopPage.vue'),
-      meta: { requiresAuth: true }, // This route remains protected.
-    },
   ],
 })
 
-// 全局前置守卫 (No changes needed here)
+// 全局前置守卫
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
-  // Wait for the auth state to finish loading
+  // 等待 Pinia store 的认证状态加载完成
   if (authStore.loading) {
     await new Promise(resolve => {
         const unsubscribe = authStore.$subscribe((mutation, state) => {
@@ -64,8 +75,9 @@ router.beforeEach(async (to, from, next) => {
   const isAuthenticated = !!authStore.user
 
   if (requiresAuth && !isAuthenticated) {
-    // For protected routes like /shop, this logic is still correct.
-    // It will now correctly ignore /details/:id because it no longer has the meta field.
+    // 对于受保护的路由，如果用户未登录，则允许进入页面，
+    // 让页面组件自己（通过 v-if="!user"）来显示“访问受限”的提示。
+    // 这种方式比强制重定向提供了更好的用户体验。
     console.log(`Access to '${to.path}' denied. User not authenticated. Letting page component handle UI.`);
     next()
   } else {

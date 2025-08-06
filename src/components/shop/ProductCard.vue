@@ -1,8 +1,9 @@
-<!-- src/components/shop/ProductCard.vue -->
+<!--  src/components/shop/ProductCard.vue -->
 
 <script setup>
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useProductsStore } from '@/stores/products';
 
 const props = defineProps({
   product: {
@@ -11,9 +12,18 @@ const props = defineProps({
   },
 })
 
-// 计算一个用户友好的日期格式
+const productsStore = useProductsStore();
+
+// This function is called just before the router navigates away.
+// It stores the complete product object in our Pinia store.
+// The details page will then read from this store for an instant load.
+function prepareForNavigation() {
+  productsStore.selectProductForDetailPage(props.product);
+}
+
+// Computes a user-friendly date format
 const formattedDate = computed(() => {
-  if (!props.product || !props.product.created_at) return '';
+  if (!props.product?.created_at) return '';
   return new Date(props.product.created_at).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'long',
@@ -24,8 +34,13 @@ const formattedDate = computed(() => {
 
 <template>
   <div class="product-card-wrapper">
-    <!-- 将卡片的核心内容区域作为导航链接 -->
-    <router-link :to="{ name: 'product-details', params: { id: product.id } }" class="card-link">
+    <!-- The main content area of the card is a router-link to the details page. -->
+    <!-- The @click handler prepares the Pinia store for an instant page load. -->
+    <router-link
+      :to="{ name: 'product-details', params: { public_id: product.public_id } }"
+      class="card-link"
+      @click="prepareForNavigation"
+    >
       <div class="card-image-wrapper">
         <img
           :src="product.image_url || '/placeholder.svg'"
@@ -42,11 +57,12 @@ const formattedDate = computed(() => {
       </div>
     </router-link>
 
-    <!-- 卡片底部的操作区域 -->
+    <!-- The actions bar at the bottom of the card. -->
     <div class="card-actions">
-      <!-- 使用插槽(slot)来接收来自父组件的操作按钮 -->
+      <!-- This slot will be filled by the parent component (e.g., ShopPage.vue) -->
+      <!-- with buttons like "Edit", "Copy Link", and "Delete". -->
       <slot name="actions">
-        <!-- Fallback content: 如果父组件没有提供操作按钮，显示一个默认的 "查看详情" 提示 -->
+        <!-- Fallback content: If no actions are provided, show a default visual cue. -->
         <div class="card-actions-visual">
           <span>查看详情 &rarr;</span>
         </div>
@@ -62,13 +78,12 @@ const formattedDate = computed(() => {
 .product-card-wrapper {
   display: flex;
   flex-direction: column;
-  background: rgba(30, 41, 59, 0.5); // Using slate color for depth
+  background: rgba(30, 41, 59, 0.5);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   overflow: hidden;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 
-  // Hover effect for the entire wrapper
   &:hover {
     transform: translateY(-5px);
     box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4);
@@ -77,11 +92,11 @@ const formattedDate = computed(() => {
 
 // --- Clickable Link Area ---
 .card-link {
-  text-decoration: none; // Remove default link underline
-  color: inherit;      // Inherit text color from parent
+  text-decoration: none;
+  color: inherit;
   display: flex;
   flex-direction: column;
-  flex-grow: 1; // Allow this part to grow and fill available space
+  flex-grow: 1;
 }
 
 // --- Image Section ---
@@ -98,7 +113,7 @@ const formattedDate = computed(() => {
   transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 
   .product-card-wrapper:hover & {
-    transform: scale(1.05); // Zoom effect on hover
+    transform: scale(1.05); // Subtle zoom effect on hover
   }
 }
 
@@ -122,9 +137,9 @@ const formattedDate = computed(() => {
   color: var(--color-text);
   line-height: 1.6;
   margin: 0 0 1rem;
-  flex-grow: 1; // Push date to the bottom
+  flex-grow: 1; // This pushes the date to the bottom
 
-  // Clamp text to 3 lines with an ellipsis
+  // Clamp text to 3 lines with an ellipsis for a clean grid layout
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -154,7 +169,7 @@ const formattedDate = computed(() => {
   }
 
   // --- Styles for slotted buttons (from parent) ---
-  // The :slotted pseudo-element allows styling content passed from a parent
+  // The :slotted() pseudo-element allows styling content passed from a parent
   :slotted(.action-btn) {
     flex: 1;
     background: transparent;
