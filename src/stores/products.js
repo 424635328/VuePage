@@ -4,7 +4,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuthStore } from './auth'
-import { useToastStore } from './toast' // ✨ 1. Import the toast store
+import { useToastStore } from './toast'
 
 export const useProductsStore = defineStore('products', () => {
   const products = ref([])
@@ -12,7 +12,7 @@ export const useProductsStore = defineStore('products', () => {
   const error = ref(null)
 
   const authStore = useAuthStore()
-  const toastStore = useToastStore() // ✨ 2. Instantiate the toast store
+  const toastStore = useToastStore()
 
   // 从数据库获取商品
   async function fetchProducts() {
@@ -31,14 +31,18 @@ export const useProductsStore = defineStore('products', () => {
     } catch (e) {
       error.value = e.message
       console.error('Error fetching products:', e.message)
-      // Optionally show a toast for fetch errors as well
-      // toastStore.showToast({ msg: `获取商品失败: ${e.message}`, toastType: 'error' });
+      toastStore.showToast({ msg: `获取商品失败: ${e.message}`, toastType: 'error' });
     } finally {
       loading.value = false
     }
   }
 
-  // 上传图片到 Storage (no changes needed here)
+  // ✨ NEW: Action to safely clear the products array from the store
+  function clearProducts() {
+    products.value = []
+  }
+
+  // 上传图片到 Storage
   async function uploadProductImage(file) {
     if (!authStore.user) throw new Error('User not authenticated for upload.')
     const fileExt = file.name.split('.').pop()
@@ -64,7 +68,6 @@ export const useProductsStore = defineStore('products', () => {
       if (imageFile) {
         imageUrl = await uploadProductImage(imageFile);
       }
-
       const { data, error: insertError } = await supabase
         .from('products')
         .insert({
@@ -74,15 +77,13 @@ export const useProductsStore = defineStore('products', () => {
         })
         .select()
         .single()
-
       if (insertError) throw insertError
-
       products.value.unshift(data)
-      toastStore.showToast({ msg: '商品添加成功！' }); // ✨ 3. Show success toast
+      toastStore.showToast({ msg: '商品添加成功！' });
       return data
     } catch (e) {
       error.value = e.message;
-      toastStore.showToast({ msg: `添加失败: ${e.message}`, toastType: 'error' }); // ✨ 4. Show error toast
+      toastStore.showToast({ msg: `添加失败: ${e.message}`, toastType: 'error' });
       console.error('Error adding product:', e.message)
       return null
     } finally {
@@ -97,10 +98,8 @@ export const useProductsStore = defineStore('products', () => {
     try {
       let imageUrl = productData.image_url;
       if (imageFile) {
-         // 可选：在这里添加删除旧图片的逻辑
         imageUrl = await uploadProductImage(imageFile);
       }
-
       const { data, error: updateError } = await supabase
         .from('products')
         .update({
@@ -111,17 +110,14 @@ export const useProductsStore = defineStore('products', () => {
         .eq('id', productId)
         .select()
         .single()
-
       if (updateError) throw updateError
-
       const index = products.value.findIndex(p => p.id === productId)
       if (index !== -1) products.value[index] = data
-
-      toastStore.showToast({ msg: '商品更新成功！' }); // ✨ 5. Show success toast
+      toastStore.showToast({ msg: '商品更新成功！' });
       return data
     } catch (e) {
       error.value = e.message
-      toastStore.showToast({ msg: `更新失败: ${e.message}`, toastType: 'error' }); // ✨ 6. Show error toast
+      toastStore.showToast({ msg: `更新失败: ${e.message}`, toastType: 'error' });
       console.error('Error updating product:', e.message)
       return null
     } finally {
@@ -138,20 +134,17 @@ export const useProductsStore = defineStore('products', () => {
         .from('products')
         .delete()
         .eq('id', productId)
-
       if (dbError) throw dbError
-
       if (imageUrl) {
         const path = new URL(imageUrl).pathname.split('/product-images/')[1];
         await supabase.storage.from('product-images').remove([path]);
       }
-
       products.value = products.value.filter(p => p.id !== productId)
-      toastStore.showToast({ msg: '商品已成功删除' }); // ✨ 7. Show success toast
+      toastStore.showToast({ msg: '商品已成功删除' });
       return true
     } catch (e) {
       error.value = e.message
-      toastStore.showToast({ msg: `删除失败: ${e.message}`, toastType: 'error' }); // ✨ 8. Show error toast
+      toastStore.showToast({ msg: `删除失败: ${e.message}`, toastType: 'error' });
       console.error('Error deleting product:', e.message)
       return false
     } finally {
@@ -167,5 +160,6 @@ export const useProductsStore = defineStore('products', () => {
     addProduct,
     updateProduct,
     deleteProduct,
+    clearProducts, // <-- The new action is now exposed
   }
 })

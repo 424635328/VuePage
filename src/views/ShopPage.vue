@@ -1,15 +1,16 @@
 <!-- src/views/ShopPage.vue -->
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { useProductsStore } from '@/stores/products'
-import { useToastStore } from '@/stores/toast' // ✨ 1. Import the toast store
+import { useToastStore } from '@/stores/toast'
 import ProductCard from '@/components/shop/ProductCard.vue'
 import ProductEditorModal from '@/components/shop/ProductEditorModal.vue'
 import FloatingActions from '@/components/shop/FloatingActions.vue'
 import AuthModal from '@/components/auth/AuthModal.vue'
+import ConfirmModal from '@/components/common/ConfirmModal.vue' // Import the new component
 
 const authStore = useAuthStore()
 const { user, loading: authLoading } = storeToRefs(authStore)
@@ -17,21 +18,33 @@ const { user, loading: authLoading } = storeToRefs(authStore)
 const productsStore = useProductsStore()
 const { products, loading: productsLoading, error } = storeToRefs(productsStore)
 
-const toastStore = useToastStore() // ✨ 2. Instantiate the toast store
+const toastStore = useToastStore()
 
+// State for modals
 const isEditorOpen = ref(false)
 const isAuthModalOpen = ref(false)
-const productToEdit = ref(null)
+const isConfirmModalOpen = ref(false) // State for the confirmation modal
 
-// 监听用户登录状态
-watch(user, (newUser) => {
-  if (newUser) {
+// State for data being acted upon
+const productToEdit = ref(null)
+const productToDelete = ref(null) // State to hold the product targeted for deletion
+
+// Watcher for login/logout events
+watch(user, (newUser, oldUser) => {
+  if (newUser && !oldUser) {
     isAuthModalOpen.value = false
     productsStore.fetchProducts()
-  } else {
-    products.value = []
+  } else if (!newUser && oldUser) {
+    productsStore.clearProducts()
   }
-}, { immediate: true })
+})
+
+// onMounted hook to handle initial page load
+onMounted(() => {
+  if (user.value) {
+    productsStore.fetchProducts()
+  }
+})
 
 function handleAddProduct() {
   productToEdit.value = null
@@ -43,39 +56,34 @@ function handleEditProduct(product) {
   isEditorOpen.value = true
 }
 
-// ✨ 3. UPDATED: handleDeleteProduct now uses the toast system implicitly
-async function handleDeleteProduct(product) {
-  // The blocking `window.confirm` is GONE.
-  // In a real-world app, you might replace this with a beautiful custom confirmation modal.
-  // For now, we proceed directly, and the feedback is handled by the toast in the store.
-  await productsStore.deleteProduct(product.id, product.image_url)
+// UPDATED: This function now opens the confirmation modal instead of deleting directly.
+function handleDeleteProduct(product) {
+  productToDelete.value = product; // Store the product to be deleted
+  isConfirmModalOpen.value = true; // Open the modal
 }
 
-// ✨ 4. UPDATED: handleShareProduct now uses the toast system
-async function handleShareProduct(product) {
-  const productUrl = `${window.location.origin}/details/${product.id}`;
-  const shareData = {
-    title: product.name,
-    text: product.description,
-    url: productUrl,
-  };
+// NEW: This function is called when the user confirms the deletion from the modal.
+async function confirmDeletion() {
+  if (productToDelete.value) {
+    await productsStore.deleteProduct(productToDelete.value.id, productToDelete.value.image_url);
+  }
+  // Close the modal and reset the state regardless of the outcome
+  isConfirmModalOpen.value = false;
+  productToDelete.value = null;
+}
 
+// Enterprise-grade Share Strategy: Copy direct link to clipboard.
+async function handleCopyLink(product) {
+  const productUrl = `${window.location.origin}/details/${product.id}`;
   try {
-    if (navigator.share) {
-      await navigator.share(shareData);
-      // No toast needed here, the native share UI provides feedback.
-    } else {
-      // Fallback for desktop/unsupported browsers
-      await navigator.clipboard.writeText(productUrl);
-      toastStore.showToast({ msg: '商品链接已复制到剪贴板' });
-    }
+    await navigator.clipboard.writeText(productUrl);
+    toastStore.showToast({ msg: '商品链接已复制到剪贴板' });
   } catch (err) {
-    console.error('Share/Copy failed:', err);
-    toastStore.showToast({ msg: '操作失败', toastType: 'error' });
+    console.error('Copy link failed:', err);
+    toastStore.showToast({ msg: '复制失败，请检查浏览器权限', toastType: 'error' });
   }
 }
 
-// 登录成功后刷新商品
 function onLoggedIn() {
   productsStore.fetchProducts();
 }
@@ -90,39 +98,55 @@ function onLoggedIn() {
         <p v-else class="fade-in">创建、管理和分享您的专属数字产品</p>
       </header>
 
-      <!-- 未登录提示 (Unchanged) -->
+      <!-- Unauthenticated Prompt -->
       <div v-if="!user && !authLoading" class="unauthenticated-prompt">
-        <!-- ... -->
+        <div class="prompt-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        </div>
+        <h2>解锁您的个人空间</h2>
+        <p>登录以访问您的私人仪表盘，在这里您可以轻松管理所有商品。</p>
+        <button @click="isAuthModalOpen = true" class="cta-button">
+          立即登录或注册
+        </button>
       </div>
 
-      <!-- 主内容区 -->
+      <!-- Main Content Area -->
       <div v-else class="shop-content">
-        <!-- 加载状态 (Unchanged) -->
+        <!-- Loading State -->
         <div v-if="productsLoading" class="loading-state">
-          <!-- ... -->
+          <div class="spinner"></div>
+          <p>正在加载商品...</p>
         </div>
 
-        <!-- 错误状态 (Unchanged) -->
+        <!-- Error State -->
         <div v-else-if="error" class="error-state">
-          <!-- ... -->
+          <div class="prompt-icon error">
+             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          </div>
+          <h2>加载出错了</h2>
+          <p>无法连接到服务器。请检查您的网络连接或稍后重试。</p>
+          <p class="error-details">错误信息: {{ error }}</p>
         </div>
 
-        <!-- 空状态 (Unchanged) -->
-        <div v-else-if="products.length === 0" class="empty-state">
-          <!-- ... -->
+        <!-- Empty State -->
+        <div v-else-if="!productsLoading && products.length === 0" class="empty-state">
+          <div class="prompt-icon">
+             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+          </div>
+          <h2>您的商店空空如也</h2>
+          <p>看起来您还没有添加任何商品。点击右下角的 '+' 按钮开始创作吧！</p>
         </div>
 
-        <!-- ✨ 5. UPDATED: Products Grid with slotted actions -->
+        <!-- Products Grid -->
         <div v-else class="products-grid">
           <ProductCard
             v-for="product in products"
             :key="product.id"
             :product="product"
           >
-            <!-- Pass action buttons into the 'actions' slot of each card -->
             <template #actions>
               <button @click.stop.prevent="handleEditProduct(product)" class="action-btn">编辑</button>
-              <button @click.stop.prevent="handleShareProduct(product)" class="action-btn">分享</button>
+              <button @click.stop.prevent="handleCopyLink(product)" class="action-btn">复制链接</button>
               <button @click.stop.prevent="handleDeleteProduct(product)" class="action-btn delete-btn">删除</button>
             </template>
           </ProductCard>
@@ -130,7 +154,7 @@ function onLoggedIn() {
       </div>
     </div>
 
-    <!-- Other components (Unchanged) -->
+    <!-- Floating Actions & Modals -->
     <FloatingActions v-if="user" @add="handleAddProduct" />
     <ProductEditorModal
       v-model:active="isEditorOpen"
@@ -138,19 +162,27 @@ function onLoggedIn() {
       @close="isEditorOpen = false"
     />
     <AuthModal v-model:active="isAuthModalOpen" @loggedIn="onLoggedIn" />
+
+    <!-- The new Confirmation Modal for deletions -->
+    <ConfirmModal
+      :show="isConfirmModalOpen"
+      title="确认删除商品"
+      :message="`您确定要永久删除 ‘${productToDelete?.name}’ 吗？此操作无法撤销。`"
+      confirm-text="确认删除"
+      @close="isConfirmModalOpen = false"
+      @confirm="confirmDeletion"
+    />
   </div>
 </template>
 
 <style lang="scss" scoped>
-/* All styles remain the same as the previously beautified version. */
+/* All previous styles are correct and do not need to be changed. */
 @use '@/assets/styles/index.scss' as *;
-
 // --- Animation Keyframes ---
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
 .fade-in { animation: fadeIn 0.5s ease-out forwards; }
 
 // --- Page & Header Styles ---
@@ -244,7 +276,6 @@ function onLoggedIn() {
       max-width: 500px; word-break: break-all;
   }
 }
-
 .spinner {
   width: 50px; height: 50px; border: 4px solid var(--color-border);
   border-top-color: var(--color-primary); border-radius: 50%;

@@ -11,7 +11,9 @@ const props = defineProps({
     default: null
   }
 });
-const emit = defineEmits(['update:active', 'close']);
+
+// ADDED: 'product-updated' event for seamless parent component updates
+const emit = defineEmits(['update:active', 'close', 'product-updated']);
 
 const productsStore = useProductsStore();
 
@@ -32,7 +34,8 @@ watch(() => props.active, (isActive) => {
   if (isActive) {
     errorMessage.value = '';
     if (props.product) {
-      form.value = { ...props.product };
+      // Use structuredClone for a deep, reactive-safe copy
+      form.value = structuredClone(props.product);
       imagePreview.value = props.product.image_url;
     } else {
       resetForm();
@@ -42,13 +45,17 @@ watch(() => props.active, (isActive) => {
 
 function handleFileChange(event) {
   const file = event.target.files[0];
-  if (file) {
+  if (file && file.type.startsWith('image/')) {
     imageFile.value = file;
     const reader = new FileReader();
     reader.onload = (e) => {
       imagePreview.value = e.target.result;
     };
     reader.readAsDataURL(file);
+  } else {
+    // Clear if the file is not an image
+    imageFile.value = null;
+    imagePreview.value = form.value.image_url; // Revert to original if available
   }
 }
 
@@ -59,7 +66,7 @@ function resetForm() {
 }
 
 async function handleSubmit() {
-  if (!form.value.name) {
+  if (!form.value.name.trim()) {
     errorMessage.value = '商品名称不能为空。';
     return;
   }
@@ -68,8 +75,13 @@ async function handleSubmit() {
   errorMessage.value = '';
 
   try {
-    const formData = { name: form.value.name, description: form.value.description, image_url: form.value.image_url };
+    const formData = {
+        name: form.value.name,
+        description: form.value.description,
+        image_url: form.value.image_url
+    };
     let result;
+
     if (isEditing.value) {
       result = await productsStore.updateProduct(props.product.id, formData, imageFile.value);
     } else {
@@ -77,9 +89,12 @@ async function handleSubmit() {
     }
 
     if (result) {
+      // On success, notify the parent component that data has changed.
+      emit('product-updated');
       closeModal();
     } else {
-      throw new Error(productsStore.error || '操作失败，请重试。');
+      // The store now handles toast notifications for errors, but we can still show a message here.
+      errorMessage.value = productsStore.error || '操作失败，请重试。';
     }
   } catch (err) {
     errorMessage.value = err.message;
@@ -91,31 +106,33 @@ async function handleSubmit() {
 function closeModal() {
   emit('update:active', false);
   emit('close');
-  resetForm();
+  // It's good practice to reset the form on close,
+  // which is handled by the `watch` effect when `active` becomes false.
 }
 </script>
 
 <template>
   <transition name="modal-fade">
-    <div v-if="active" class="modal-backdrop" @click.self="closeModal">
+    <!-- REMOVED: @click.self="closeModal" from the backdrop to make it persistent -->
+    <div v-if="active" class="modal-backdrop">
       <div class="modal-container">
         <header class="modal-header">
           <h2>{{ isEditing ? '编辑商品' : '新增商品' }}</h2>
-          <button @click="closeModal" class="close-btn">&times;</button>
+          <button @click="closeModal" class="close-btn" aria-label="关闭">&times;</button>
         </header>
         <main class="modal-body">
-          <form @submit.prevent="handleSubmit">
+          <form @submit.prevent="handleSubmit" novalidate>
             <div class="form-group">
               <label for="name">商品名称 *</label>
-              <input type="text" id="name" v-model="form.name" required />
+              <input type="text" id="name" v-model.trim="form.name" required />
             </div>
             <div class="form-group">
               <label for="description">商品描述</label>
-              <textarea id="description" v-model="form.description" rows="4"></textarea>
+              <textarea id="description" v-model="form.description" rows="5"></textarea>
             </div>
             <div class="form-group">
               <label for="image">商品图片</label>
-              <input type="file" id="image" @change="handleFileChange" accept="image/*" />
+              <input type="file" id="image" @change="handleFileChange" accept="image/png, image/jpeg, image/webp" />
               <div v-if="imagePreview" class="image-preview">
                 <img :src="imagePreview" alt="图片预览" />
               </div>
@@ -136,105 +153,81 @@ function closeModal() {
 </template>
 
 <style lang="scss" scoped>
-.modal-fade-enter-active, .modal-fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.modal-fade-enter-from, .modal-fade-leave-to {
-  opacity: 0;
-}
-
+.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.3s ease; }
+.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 .modal-backdrop {
-  position: fixed;
-  top: 0; left: 0;
+  position: fixed; top: 0; left: 0;
   width: 100%; height: 100%;
   background-color: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(5px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  display: flex; justify-content: center; align-items: center;
   z-index: 2000;
 }
-
 .modal-container {
   background-color: #1e1e1e;
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  width: 90%;
-  max-width: 600px;
+  width: 90%; max-width: 600px;
   max-height: 90vh;
-  display: flex;
-  flex-direction: column;
+  display: flex; flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
 }
-
 .modal-header, .modal-footer {
   padding: 1.5rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-shrink: 0;
 }
 .modal-header {
   border-bottom: 1px solid var(--color-border);
-  h2 { font-size: 1.5rem; color: var(--color-heading); }
+  h2 { font-size: 1.5rem; color: var(--color-heading); margin: 0; }
 }
 .modal-footer {
   border-top: 1px solid var(--color-border);
   gap: 1rem;
 }
-
 .close-btn {
-  background: none;
-  border: none;
-  font-size: 2rem;
-  color: var(--color-text);
-  cursor: pointer;
+  background: none; border: none; font-size: 2rem;
+  color: var(--color-text); cursor: pointer;
+  padding: 0; line-height: 1;
+  &:hover { color: var(--color-heading); }
 }
-
 .modal-body {
   padding: 1.5rem;
   overflow-y: auto;
 }
-
 .form-group {
   margin-bottom: 1.5rem;
   label {
-    display: block;
-    margin-bottom: 0.5rem;
+    display: block; margin-bottom: 0.5rem;
     color: var(--color-text-dark);
   }
   input[type="text"], textarea {
-    width: 100%;
-    padding: 0.75rem;
+    width: 100%; padding: 0.75rem;
     background-color: #2a2a2a;
     border: 1px solid var(--color-border);
-    border-radius: 8px;
-    color: var(--color-text);
-    font-size: 1rem;
+    border-radius: 8px; color: var(--color-text); font-size: 1rem;
+    transition: border-color 0.2s;
+    &:focus { border-color: var(--color-primary); outline: none; }
   }
-  input[type="file"] {
-      color: var(--color-text);
-  }
+  input[type="file"] { color: var(--color-text); }
+  textarea { resize: vertical; }
 }
-
 .image-preview {
   margin-top: 1rem;
   img {
-    max-width: 100%;
-    max-height: 200px;
-    border-radius: 8px;
+    max-width: 100%; max-height: 200px;
+    border-radius: 8px; object-fit: cover;
   }
 }
-
 .error-message {
-  color: #e53e3e;
-  margin-top: 1rem;
+  color: #f87171;
+  background-color: rgba(248, 113, 113, 0.1);
+  padding: 0.75rem; border-radius: 8px;
+  margin-top: 1rem; text-align: center;
 }
-
 .btn {
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  border: none;
-  font-weight: 600;
-  cursor: pointer;
+  padding: 0.75rem 1.5rem; border-radius: 8px;
+  border: none; font-weight: 600; cursor: pointer;
   &.btn-primary {
     background-color: var(--color-primary);
     color: #1a1a1a;
@@ -248,14 +241,10 @@ function closeModal() {
     cursor: not-allowed;
   }
   .spinner {
-      display: inline-block;
-      width: 1em; height: 1em;
-      border: 2px solid currentColor;
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
+    display: inline-block; width: 1em; height: 1em;
+    border: 2px solid currentColor; border-top-color: transparent;
+    border-radius: 50%; animation: spin 0.6s linear infinite;
   }
 }
-
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>

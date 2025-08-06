@@ -164,7 +164,7 @@ async function handleResendConfirmation() {
 
 <template>
   <transition name="modal-fade">
-    <div v-if="active" class="modal-backdrop" @click.self="closeModal">
+    <div v-if="active" class="modal-backdrop">
       <div class="modal-container">
         <header class="modal-header">
           <h2 v-if="formMode === 'login'">登录</h2>

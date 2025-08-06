@@ -1,5 +1,3 @@
-// src/router/index.js
-
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import HomePage from '../views/HomePage.vue'
@@ -33,23 +31,24 @@ const router = createRouter({
       path: '/details/:id',
       name: 'product-details',
       component: () => import('../views/ProductDetailsPage.vue'),
-      meta: { requiresAuth: true },
+      // ✨ UPDATED: The meta field has been removed to make this route public.
+      // meta: { requiresAuth: true },
       props: true,
     },
     {
       path: '/shop',
       name: 'shop',
       component: () => import('../views/ShopPage.vue'),
-      meta: { requiresAuth: true }, // 标记此路由需要登录
+      meta: { requiresAuth: true }, // This route remains protected.
     },
   ],
 })
 
-// 全局前置守卫
+// 全局前置守卫 (No changes needed here)
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
-  // 等待 Pinia store 的认证状态加载完成
+  // Wait for the auth state to finish loading
   if (authStore.loading) {
     await new Promise(resolve => {
         const unsubscribe = authStore.$subscribe((mutation, state) => {
@@ -65,11 +64,9 @@ router.beforeEach(async (to, from, next) => {
   const isAuthenticated = !!authStore.user
 
   if (requiresAuth && !isAuthenticated) {
-    // 如果需要登录但用户未登录，可以重定向到首页或显示登录提示
-    // 在本例中，我们让页面组件自己处理UI，只阻止导航
-    console.log('Access denied. User not authenticated.');
-    // 如果希望重定向，使用 next({ name: 'home' })
-    // 这里我们允许进入页面，让页面组件处理未登录状态
+    // For protected routes like /shop, this logic is still correct.
+    // It will now correctly ignore /details/:id because it no longer has the meta field.
+    console.log(`Access to '${to.path}' denied. User not authenticated. Letting page component handle UI.`);
     next()
   } else {
     next()
