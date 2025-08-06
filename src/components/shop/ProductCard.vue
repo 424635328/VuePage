@@ -1,5 +1,4 @@
-<!-- src/components/shop/ProductCard.vue -->
-
+<!-- src/components/ProductCard.vue -->
 <script setup>
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -18,7 +17,6 @@ function prepareForNavigation() {
   productsStore.selectProductForDetailPage(props.product);
 }
 
-// Computes a user-friendly date format
 const formattedDate = computed(() => {
   if (!props.product?.created_at) return '';
   return new Date(props.product.created_at).toLocaleDateString('zh-CN', {
@@ -31,8 +29,6 @@ const formattedDate = computed(() => {
 
 <template>
   <div class="product-card-wrapper">
-    <!-- The main content area of the card is a router-link to the details page. -->
-    <!-- The @click handler prepares the Pinia store for an instant page load. -->
     <router-link
       :to="{ name: 'product-details', params: { public_id: product.public_id } }"
       class="card-link"
@@ -54,12 +50,8 @@ const formattedDate = computed(() => {
       </div>
     </router-link>
 
-    <!-- The actions bar at the bottom of the card. -->
     <div class="card-actions">
-      <!-- This slot will be filled by the parent component (e.g., ShopPage.vue) -->
-      <!-- with buttons like "Edit", "Copy Link", and "Delete". -->
       <slot name="actions">
-        <!-- Fallback content: If no actions are provided, show a default visual cue. -->
         <div class="card-actions-visual">
           <span>查看详情 &rarr;</span>
         </div>
@@ -71,7 +63,6 @@ const formattedDate = computed(() => {
 <style lang="scss" scoped>
 @use '@/assets/styles/index.scss' as *;
 
-// --- Main Wrapper ---
 .product-card-wrapper {
   display: flex;
   flex-direction: column;
@@ -87,7 +78,6 @@ const formattedDate = computed(() => {
   }
 }
 
-// --- Clickable Link Area ---
 .card-link {
   text-decoration: none;
   color: inherit;
@@ -96,13 +86,13 @@ const formattedDate = computed(() => {
   flex-grow: 1;
 }
 
-// --- Image Section ---
 .card-image-wrapper {
   width: 100%;
   height: 200px;
   background-color: #2a2a2a;
   overflow: hidden;
 }
+
 .product-image {
   width: 100%;
   height: 100%;
@@ -110,11 +100,10 @@ const formattedDate = computed(() => {
   transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 
   .product-card-wrapper:hover & {
-    transform: scale(1.05); // Subtle zoom effect on hover
+    transform: scale(1.05);
   }
 }
 
-// --- Content Section ---
 .card-content {
   padding: 1.5rem;
   flex-grow: 1;
@@ -134,14 +123,12 @@ const formattedDate = computed(() => {
   color: var(--color-text);
   line-height: 1.6;
   margin: 0 0 1rem;
-  flex-grow: 1; // This pushes the date to the bottom
-
-  // Clamp text to 3 lines with an ellipsis for a clean grid layout
+  flex-grow: 1;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: calc(1.6em * 3); /* Ensure consistent height for at least 3 lines */
+  min-height: calc(1.6em * 3);
 }
 
 .product-date {
@@ -150,13 +137,11 @@ const formattedDate = computed(() => {
   margin: 0;
 }
 
-// --- Actions Section ---
 .card-actions {
   display: flex;
   border-top: 1px solid var(--color-border);
-  background-color: rgba(0, 0, 0, 0.2); // Slightly different background for the bar
+  background-color: rgba(0, 0, 0, 0.2);
 
-  // Default visual cue if no slot content is provided
   .card-actions-visual {
     width: 100%;
     padding: 1rem;
@@ -165,8 +150,6 @@ const formattedDate = computed(() => {
     color: var(--color-primary);
   }
 
-  // --- Styles for slotted buttons (from parent) ---
-  // The :slotted() pseudo-element allows styling content passed from a parent
   :slotted(.action-btn) {
     flex: 1;
     background: transparent;

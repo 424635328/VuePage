@@ -28,22 +28,33 @@ const isConfirmModalOpen = ref(false);
 // State for data being acted upon
 const productToDelete = ref(null);
 
-// Watcher for login/logout events
+// ✨ 修复：这个 watcher 现在是响应UI变化的主要驱动力
 watch(user, (newUser, oldUser) => {
+  // 当 user 从 null 变为有值时，说明登录成功
   if (newUser && !oldUser) {
-    isAuthModalOpen.value = false;
+    console.log('User state changed to logged in, fetching products...');
+    isAuthModalOpen.value = false; // 确保模态框关闭
     productsStore.fetchProducts();
   } else if (!newUser && oldUser) {
+    // 当 user 从有值变为 null 时，说明登出
+    console.log('User state changed to logged out, clearing products...');
     productsStore.clearProducts();
   }
 });
 
-// onMounted hook to handle initial page load
 onMounted(() => {
+  // onMounted 逻辑保持不变，处理页面刷新后的情况
   if (user.value) {
     productsStore.fetchProducts();
   }
 });
+
+function onLoggedIn() {
+  console.log('AuthModal emitted loggedIn event.');
+  if(user.value) {
+    productsStore.fetchProducts();
+  }
+}
 
 function handleAddProduct() {
   router.push({ name: 'product-new' });
@@ -78,9 +89,6 @@ async function handleCopyLink(product) {
   }
 }
 
-function onLoggedIn() {
-  productsStore.fetchProducts();
-}
 </script>
 
 <template>

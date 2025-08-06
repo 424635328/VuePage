@@ -19,7 +19,6 @@ export const useProductsStore = defineStore('products', () => {
     selectedProduct.value = product
   }
 
-  // 从数据库获取商品
   async function fetchProducts() {
     if (!authStore.user) return
     loading.value = true
@@ -35,7 +34,6 @@ export const useProductsStore = defineStore('products', () => {
       products.value = data
     } catch (e) {
       error.value = e.message
-      console.error('Error fetching products:', e.message)
       toastStore.showToast({ msg: `获取商品失败: ${e.message}`, toastType: 'error' });
     } finally {
       loading.value = false
@@ -46,9 +44,8 @@ export const useProductsStore = defineStore('products', () => {
     products.value = []
   }
 
-  // 上传图片到 Storage (helper function)
   async function uploadProductImage(file) {
-    if (!authStore.user) throw new Error('User not authenticated for upload.')
+    if (!authStore.user) throw new Error('用户未登录，无法上传。')
     const fileExt = file.name.split('.').pop()
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
     const filePath = `${authStore.user.id}/${fileName}`
@@ -62,20 +59,16 @@ export const useProductsStore = defineStore('products', () => {
     return data.publicUrl
   }
 
-  // ✨ REWRITTEN & FIXED: The addProduct function is now more robust.
-  // It prepares all data first and inserts the product record in a single operation.
   async function addProduct(productData, imageFiles) {
     loading.value = true;
     error.value = null;
     try {
       let imageUrls = [];
-      // Step 1: Handle image uploads first. If this fails, we haven't created an orphaned product record.
       if (imageFiles && imageFiles.length > 0) {
         const imageUploadPromises = imageFiles.map(file => uploadProductImage(file));
         imageUrls = await Promise.all(imageUploadPromises);
       }
 
-      // Step 2: Prepare the complete product record for a single insertion.
       const productToInsert = {
         name: productData.name,
         description: productData.description,
@@ -83,7 +76,6 @@ export const useProductsStore = defineStore('products', () => {
         thumbnail_url: imageUrls.length > 0 ? imageUrls[0] : null,
       };
 
-      // Step 3: Insert the complete product record in one atomic operation.
       const { data: newProduct, error: insertError } = await supabase
         .from('products')
         .insert(productToInsert)
@@ -91,7 +83,6 @@ export const useProductsStore = defineStore('products', () => {
         .single();
       if (insertError) throw insertError;
 
-      // Step 4: If there were images, insert their relationships into the product_images table.
       if (imageUrls.length > 0) {
         const imageRecords = imageUrls.map((url, index) => ({
           product_id: newProduct.id,
@@ -101,13 +92,9 @@ export const useProductsStore = defineStore('products', () => {
         const { error: imageInsertError } = await supabase
           .from('product_images')
           .insert(imageRecords);
-
-        // If this part fails, we throw an error. The product is created, but the gallery might be incomplete.
-        // This is a reasonable trade-off, and the user is notified.
         if (imageInsertError) throw imageInsertError;
       }
 
-      // Step 5: Everything succeeded. Update the local state and return the new product.
       products.value.unshift(newProduct);
       toastStore.showToast({ msg: '商品添加成功！' });
       return newProduct;
@@ -115,15 +102,12 @@ export const useProductsStore = defineStore('products', () => {
     } catch (e) {
       error.value = e.message;
       toastStore.showToast({ msg: `添加失败: ${e.message}`, toastType: 'error' });
-      console.error('Error adding product:', e.message);
-      // In a real-world scenario, you might want to add logic here to delete uploaded images if the DB insert fails.
       return null;
     } finally {
       loading.value = false;
     }
   }
 
-  // 更新商品
   async function updateProduct(productId, productData, newImageFiles, existingImages) {
     loading.value = true;
     error.value = null;
@@ -181,19 +165,16 @@ export const useProductsStore = defineStore('products', () => {
     } catch (e) {
       error.value = e.message;
       toastStore.showToast({ msg: `更新失败: ${e.message}`, toastType: 'error' });
-      console.error('Error updating product:', e.message)
       return null
     } finally {
       loading.value = false;
     }
   }
 
-  // ✨ REWRITTEN & FIXED: The deleteProduct function is now robust and correct.
   async function deleteProduct(productId) {
     loading.value = true;
     error.value = null;
     try {
-      // Step 1: Fetch all associated image URLs BEFORE deleting the product record.
       const { data: images, error: fetchImagesError } = await supabase
         .from('product_images')
         .select('image_url')
@@ -201,37 +182,29 @@ export const useProductsStore = defineStore('products', () => {
 
       if (fetchImagesError) throw fetchImagesError;
 
-      // Step 2: If images exist, delete them from Storage.
       if (images && images.length > 0) {
         const imageUrls = images.map(img => img.image_url);
         const pathsToRemove = imageUrls.map(url => new URL(url).pathname.split('/product-images/')[1]);
-
         const { error: storageError } = await supabase.storage
           .from('product-images')
           .remove(pathsToRemove);
-
         if (storageError) {
-          // Log the error but proceed with DB deletion, as it's the most critical part.
-          console.error("Failed to remove some images from storage:", storageError.message);
+          console.error("未能从存储中移除部分图片:", storageError.message);
         }
       }
 
-      // Step 3: Delete the main product record from the database.
-      // The `ON DELETE CASCADE` constraint will automatically clean up the `product_images` table records.
       const { error: dbError } = await supabase
         .from('products')
         .delete()
         .eq('id', productId);
       if (dbError) throw dbError;
 
-      // Step 4: Update the local state.
       products.value = products.value.filter(p => p.id !== productId);
       toastStore.showToast({ msg: '商品已成功删除' });
       return true;
     } catch (e) {
       error.value = e.message;
       toastStore.showToast({ msg: `删除失败: ${e.message}`, toastType: 'error' });
-      console.error('Error deleting product:', e.message);
       return false;
     } finally {
       loading.value = false;

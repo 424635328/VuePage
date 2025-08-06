@@ -112,9 +112,11 @@ function selectImage(url) {
 function handleEdit() {
   router.push({ name: 'product-edit', params: { public_id: product.value.public_id } });
 }
+
 function handleDelete() {
   isConfirmModalOpen.value = true;
 }
+
 async function confirmDeletion() {
   if (product.value) {
     const success = await productsStore.deleteProduct(product.value.id);
@@ -130,8 +132,9 @@ async function shareProduct() {
     url: window.location.href,
   };
   try {
-    if (navigator.share) await navigator.share(shareData);
-    else {
+    if (navigator.share) {
+      await navigator.share(shareData);
+    } else {
       await navigator.clipboard.writeText(window.location.href);
       toastStore.showToast({ msg: '链接已复制到剪贴板' });
     }
@@ -144,12 +147,14 @@ async function shareProduct() {
 }
 
 onMounted(loadProductData);
+
 onUnmounted(() => {
   productsStore.selectProductForDetailPage(null);
 });
 
 const formattedDate = (d) => d ? new Date(d).toLocaleString('zh-CN', { dateStyle: 'long', timeStyle: 'short' }) : 'N/A';
 const lastUpdated = computed(() => product.value ? formattedDate(product.value.updated_at || product.value.created_at) : '');
+
 </script>
 
 <template>
@@ -158,11 +163,13 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
       <div class="spinner"></div>
       <p>正在加载商品详情...</p>
     </div>
+
     <div v-else-if="error || !product" class="error-state">
       <h2>无法找到商品</h2>
       <p>{{ error }}</p>
       <router-link to="/shop" class="cta-button">返回商店</router-link>
     </div>
+
     <div v-else class="container">
       <div v-if="isOwner" class="owner-toolbar">
         <span class="toolbar-label">所有者工具</span>
@@ -182,10 +189,8 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
         <button @click="router.push('/shop')" class="back-button">&larr; 返回商店</button>
       </div>
 
-      <!-- ✨ 优化: 整个文章内容由一个新的 .details-layout 容器包裹 -->
       <div class="details-layout">
-        <!-- ✨ 优化: 图片画廊现在是布局的左侧列 -->
-        <div v-if="images.length > 0" class="gallery-column fade-in-item">
+        <aside v-if="images.length > 0" class="gallery-column fade-in-item">
           <div class="main-image-wrapper">
             <img :src="currentImage" :alt="product.name" class="main-image" />
           </div>
@@ -196,9 +201,8 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
                  :class="{ active: currentImage === img.image_url }"
                  @click="selectImage(img.image_url)" />
           </div>
-        </div>
+        </aside>
 
-        <!-- ✨ 优化: 主要内容现在是布局的右侧列 -->
         <article class="content-column">
           <header class="article-header fade-in-item">
             <h1 class="product-title">{{ product.name }}</h1>
@@ -238,38 +242,40 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
 <style lang="scss" scoped>
 @use '@/assets/styles/index.scss' as *;
 
-// --- Animation ---
-@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .fade-in-item {
   opacity: 0;
   animation: fadeIn 0.6s ease-out forwards;
 }
 
-// --- Base Page Styles ---
 .details-page {
   padding: 2rem 0 6rem;
 }
+
 .container {
-  max-width: 1200px; /* ✨ 优化: 增加最大宽度以适应分栏布局 */
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 2rem;
 }
 
-// ✨ 优化: 新增主布局容器
 .details-layout {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 3rem; // 列之间的间距
+  gap: 3rem;
 }
 
-// ✨ 优化: 左侧画廊列的样式
 .gallery-column {
-  flex: 0 0 40%; // 不拉伸，不压缩，基础宽度为40%
+  flex: 0 0 40%;
   max-width: 500px;
-  position: sticky; // 在滚动时固定位置，提升体验
-  top: calc($header-height + 2rem); // 距离顶部导航栏的距离
+  position: sticky;
+  top: calc($header-height + 2rem);
 }
+
 .main-image-wrapper {
   border-radius: 12px;
   overflow: hidden;
@@ -277,17 +283,20 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   background: var(--color-background-soft);
   margin-bottom: 1rem;
 }
+
 .main-image {
   width: 100%;
   display: block;
   aspect-ratio: 4 / 3;
   object-fit: cover;
 }
+
 .thumbnail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
   gap: 0.75rem;
 }
+
 .thumbnail-image {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -305,13 +314,11 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   }
 }
 
-// ✨ 优化: 右侧内容列的样式
 .content-column {
-  flex: 1; // 占据剩余的所有空间
-  min-width: 0; // 防止flex item内容溢出
+  flex: 1;
+  min-width: 0;
 }
 
-// --- Owner Toolbar Styles ---
 .owner-toolbar {
   position: sticky;
   top: $header-height;
@@ -337,18 +344,25 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   }
 }
 
-.back-button-wrapper { margin-bottom: 2rem; }
+.back-button-wrapper {
+  margin-bottom: 2rem;
+}
+
 .back-button {
   background: none; border: 1px solid var(--color-border); color: var(--color-text); padding: 0.5rem 1rem;
   border-radius: 8px; cursor: pointer; transition: all 0.2s;
   &:hover { background: var(--color-background-soft); color: var(--color-heading); }
 }
 
-.article-header { margin-bottom: 3rem; }
+.article-header {
+  margin-bottom: 3rem;
+}
+
 .product-title {
   font-size: 3rem; font-weight: 700; color: var(--color-heading);
   line-height: 1.2; margin-bottom: 1.5rem;
 }
+
 .meta-info {
   font-size: 0.9rem; color: var(--color-text-dark); display: inline-block;
   padding: 0.75rem 1.5rem; border-radius: 8px; border: 1px solid var(--color-border);
@@ -356,7 +370,8 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   p { margin: 0 0 0.25rem; &:last-child { margin-bottom: 0; } }
 }
 
-.article-body { /* margin-top is handled by header's margin-bottom */ }
+.article-body { }
+
 .content-block {
   margin-bottom: 3rem;
   .block-title {
@@ -364,30 +379,35 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
     padding-bottom: 0.75rem; border-bottom: 1px solid var(--color-border); position: relative;
     &::before { content: ''; position: absolute; bottom: -1px; left: 0; width: 50px; height: 2px; background-color: var(--color-primary); }
   }
-  .block-content { font-size: 1.15rem; line-height: 2; color: var(--color-text-dark); white-space: pre-wrap; }
+  .block-content {
+    font-size: 1.15rem;
+    line-height: 2;
+    color: var(--color-text-dark);
+    white-space: pre-wrap;
+  }
 }
 
 .article-footer {
   text-align: center; margin-top: 4rem; padding-top: 2rem;
   border-top: 1px solid var(--color-border);
 }
+
 .cta-button {
   padding: 0.8rem 2rem; font-size: 1rem; font-weight: 600; border-radius: 8px; border: none;
   cursor: pointer; transition: all 0.2s ease; background-color: var(--color-primary); color: #1a1a1a;
   &:hover { transform: translateY(-2px); }
 }
 
-// --- Responsive Adjustments ---
-@media (max-width: 992px) { /* ✨ 优化: 调整响应式断点 */
+@media (max-width: 992px) {
   .details-layout {
-    flex-direction: column; // 在平板和手机上垂直堆叠
+    flex-direction: column;
     gap: 2.5rem;
   }
   .gallery-column {
-    flex-basis: auto; // 重置flex-basis
+    flex-basis: auto;
     width: 100%;
     max-width: 100%;
-    position: static; // 取消滚动固定
+    position: static;
   }
 }
 @media (max-width: 768px) {
@@ -396,7 +416,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   .owner-toolbar { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
 }
 
-// --- Loading/Error States ---
 .loading-state, .error-state {
   display: flex; flex-direction: column; justify-content: center; align-items: center;
   min-height: 60vh; text-align: center;

@@ -1,261 +1,275 @@
 <!-- src/components/auth/AuthModal.vue -->
-
 <script setup>
-import { ref, reactive, nextTick } from 'vue';
+import { ref, reactive, watch, nextTick } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 
-defineProps({ active: Boolean });
-const emit = defineEmits(['update:active', 'close', 'loggedIn']);
-
+// --- Props, Emits, and Store ---
+const props = defineProps({ active: Boolean });
+const emit = defineEmits(['close', 'loggedIn']);
 const authStore = useAuthStore();
 
-// --- State Management ---
-const formMode = ref('login'); // 'login', 'register', or 'verify'
-const loading = ref(false);
-const errorMessage = ref('');
-const successMessage = ref('');
-
-const loginForm = reactive({ email: '', password: '' });
-const registerForm = reactive({ email: '', password: '', confirmPassword: '' });
-const otpCode = ref('');
-
+// --- Component State ---
+const formMode = ref('login'); // 'login', 'register', 'verify'
 const isShaking = ref(false);
-const showResendLink = ref(false);
+const otpInputRefs = ref([]);
 
-// --- Utility Functions ---
-function closeModal() {
-  emit('update:active', false);
-  emit('close');
-  setTimeout(() => {
-    formMode.value = 'login';
-    errorMessage.value = '';
-    successMessage.value = '';
-    isShaking.value = false;
-    showResendLink.value = false;
-    otpCode.value = '';
-    Object.assign(loginForm, { email: '', password: '' });
-    Object.assign(registerForm, { email: '', password: '', confirmPassword: '' });
-  }, 300);
+const getInitialState = () => ({
+  form: {
+    email: '',
+    password: '',
+    confirmPassword: '',
+    otp: Array(6).fill(''),
+  },
+  status: {
+    loading: false,
+    error: '',
+    success: '',
+    showResendLink: false,
+  }
+});
+
+const form = reactive(getInitialState().form);
+const status = reactive(getInitialState().status);
+
+// --- Core Logic & Handlers ---
+function resetState() {
+  Object.assign(form, getInitialState().form);
+  Object.assign(status, getInitialState().status);
+  formMode.value = 'login';
 }
 
-// --- Logic Handlers ---
-async function handleLogin() {
-  loading.value = true;
+function closeModal() {
+  emit('close');
+  setTimeout(resetState, 300);
+}
+
+// ✨ 修复：修改 _handleSubmit，使其返回布尔值表示成功或失败
+async function _handleSubmit(action) {
+  status.loading = true;
+  status.error = '';
+  status.success = '';
+  status.showResendLink = false;
   await nextTick();
 
-  errorMessage.value = '';
-  successMessage.value = '';
-  showResendLink.value = false;
-
   try {
-    await authStore.signInWithPassword({ ...loginForm });
-    emit('loggedIn');
-    closeModal();
+    await action();
+    return true; // 成功时返回 true
   } catch (error) {
+    status.error = error.message || '发生未知错误。';
     isShaking.value = true;
     setTimeout(() => isShaking.value = false, 500);
-
-    if (error.message.includes('Email not confirmed')) {
-      errorMessage.value = '您的账户尚未激活，请检查邮箱。';
-      showResendLink.value = true;
-    } else {
-      errorMessage.value = '登录失败，请检查您的邮箱和密码。';
-    }
+    return false; // 失败时返回 false
   } finally {
-    loading.value = false;
+    // 这个 finally 块现在总是在 UI 清理（如 closeModal）之前执行
+    status.loading = false;
   }
 }
 
+// ✨ 修复：重构 handleLogin 以解决竞态条件
+async function handleLogin() {
+  // 1. 调用包装器执行核心登录请求，并等待其结果
+  const loginSuccessful = await _handleSubmit(async () => {
+    await authStore.signInWithPassword({ email: form.email, password: form.password });
+  });
+
+  // 2. 如果登录成功，才执行关闭模态框等UI操作
+  if (loginSuccessful) {
+    emit('loggedIn');
+    closeModal();
+  } else {
+    // 3. 如果登录失败，处理特定的错误信息
+    if (status.error.includes('Email not confirmed')) {
+      status.error = '您的账户尚未激活，请检查邮箱。';
+      status.showResendLink = true;
+    } else {
+      // 提供一个更通用的失败提示
+      status.error = '登录失败，请检查您的邮箱和密码。';
+    }
+  }
+}
+
+
 async function handleRegister() {
-  if (registerForm.password !== registerForm.confirmPassword) {
-    errorMessage.value = '两次输入的密码不匹配。'; return;
+  if (form.password !== form.confirmPassword) {
+    status.error = '两次输入的密码不匹配。'; return;
   }
-  if (registerForm.password.length < 6) {
-    errorMessage.value = '密码至少需要6个字符。'; return;
+  if (form.password.length < 6) {
+    status.error = '密码至少需要6个字符。'; return;
   }
 
-  loading.value = true;
-  await nextTick();
+  const registerSuccessful = await _handleSubmit(async () => {
+    await authStore.signUp({ email: form.email, password: form.password });
+  });
 
-  errorMessage.value = '';
-  try {
-    await authStore.signUp({ email: registerForm.email, password: registerForm.password });
+  if(registerSuccessful) {
     formMode.value = 'verify';
-  } catch (error) {
-    errorMessage.value = error.message || '注册失败，该邮箱可能已被使用。';
-  } finally {
-    loading.value = false;
+    status.success = `注册成功！我们已向 ${form.email} 发送了一封确认邮件。`;
+  } else if (!status.error.includes('rate limit')) {
+     status.error = '注册失败，该邮箱可能已被使用。';
   }
 }
 
 async function handleVerifyOtp() {
-  if (otpCode.value.length !== 6) {
-    errorMessage.value = '请输入一个有效的6位数验证码。';
-    isShaking.value = true;
-    setTimeout(() => isShaking.value = false, 500);
-    return;
+  const otpCode = form.otp.join('');
+  if (otpCode.length !== 6) {
+    status.error = '请输入一个有效的6位数验证码。'; return;
   }
 
-  loading.value = true;
-  await nextTick();
+  const verifySuccessful = await _handleSubmit(async () => {
+    await authStore.verifyOtp(form.email, otpCode);
+  });
 
-  errorMessage.value = '';
-  try {
-    await authStore.verifyOtp(registerForm.email, otpCode.value);
+  if (verifySuccessful) {
     emit('loggedIn');
     closeModal();
-  } catch(error) {
-    // ✨ FIX: Using the 'error' variable to provide a more specific message
-    errorMessage.value = error.message || '验证码无效或已过期，请重试。';
-    isShaking.value = true;
-    setTimeout(() => isShaking.value = false, 500);
-  } finally {
-    loading.value = false;
+  } else {
+     status.error = '验证码无效或已过期，请重试。';
   }
 }
 
 async function handleGithubLogin() {
+  // GitHub登录涉及页面跳转，其逻辑保持不变
   await authStore.signInWithGithub();
   closeModal();
-  emit('loggedIn');
 }
 
 async function handlePasswordReset() {
-  if (!loginForm.email) {
-    errorMessage.value = '请输入您的邮箱地址以重置密码。';
-    isShaking.value = true; setTimeout(() => isShaking.value = false, 500);
-    return;
+  if (!form.email) {
+    status.error = '请输入您的邮箱地址以重置密码。'; return;
   }
-  loading.value = true;
-  await nextTick();
-
-  errorMessage.value = '';
-  successMessage.value = '';
-  try {
-    await authStore.sendPasswordResetEmail(loginForm.email);
-    successMessage.value = `密码重置链接已发送至 ${loginForm.email}，请查收。`;
-  } catch (error) {
-    errorMessage.value = error.message;
-  } finally {
-    loading.value = false;
-  }
+  await _handleSubmit(async () => {
+    await authStore.sendPasswordResetEmail(form.email);
+    status.success = `密码重置链接已发送至 ${form.email}，请查收。`;
+  });
 }
 
 async function handleResendConfirmation() {
-  if (!loginForm.email) {
-    errorMessage.value = '请输入您的邮箱地址以重新发送邮件。';
-    isShaking.value = true; setTimeout(() => isShaking.value = false, 500);
-    return;
+  if (!form.email) {
+    status.error = '请输入您的邮箱地址以重新发送邮件。'; return;
   }
-  loading.value = true;
-  await nextTick();
+  await _handleSubmit(async () => {
+    await authStore.resendConfirmationEmail(form.email);
+    status.success = `新的确认邮件已成功发送至 ${form.email}，请查收。`;
+    status.showResendLink = false;
+  });
+}
 
-  errorMessage.value = '';
-  successMessage.value = '';
-  try {
-    await authStore.resendConfirmationEmail(loginForm.email);
-    successMessage.value = `新的确认邮件已发送至 ${loginForm.email}，请查收。`;
-    showResendLink.value = false;
-  } catch (error) {
-    errorMessage.value = error.message;
-  } finally {
-    loading.value = false;
+// --- OTP Input Logic ---
+function handleOtpInput(e, index) {
+  const input = e.target;
+  let value = input.value;
+  form.otp[index - 1] = value.substring(value.length - 1);
+  if (value && index < 6) otpInputRefs.value[index].focus();
+}
+
+function handleOtpKeyDown(e, index) {
+  if (e.key === 'Backspace' && !form.otp[index - 1] && index > 1) {
+    otpInputRefs.value[index - 2].focus();
   }
 }
+
+function handleOtpPaste(e) {
+  e.preventDefault();
+  const pastedData = e.clipboardData.getData('text').slice(0, 6);
+  if (/^\d{6}$/.test(pastedData)) {
+    pastedData.split('').forEach((char, index) => { form.otp[index] = char; });
+    otpInputRefs.value[5].focus();
+  }
+}
+
+// --- Autofocus ---
+const firstInput = ref(null);
+watch(() => props.active, (isActive) => {
+  if (isActive) {
+    nextTick(() => {
+        const target = formMode.value === 'verify' ? otpInputRefs.value[0] : firstInput.value;
+        target?.focus();
+    });
+  }
+});
+watch(formMode, () => {
+    status.error = '';
+    status.success = '';
+    isShaking.value = false;
+    nextTick(() => {
+        const target = formMode.value === 'verify' ? otpInputRefs.value[0] : firstInput.value;
+        target?.focus();
+    });
+});
 </script>
 
 <template>
   <transition name="modal-fade">
-    <div v-if="active" class="modal-backdrop">
-      <div class="modal-container">
+    <div v-if="active" class="modal-backdrop" @click.self="closeModal">
+      <div :class="['modal-container', { 'is-shaking': isShaking }]" @click.stop>
         <header class="modal-header">
-          <h2 v-if="formMode === 'login'">登录</h2>
-          <h2 v-else-if="formMode === 'register'">创建账户</h2>
-          <h2 v-else-if="formMode === 'verify'">输入验证码</h2>
-          <button @click="closeModal" class="close-btn">&times;</button>
+          <h2 class="modal-title" v-if="formMode === 'login'">登录</h2>
+          <h2 class="modal-title" v-else-if="formMode === 'register'">创建账户</h2>
+          <h2 class="modal-title" v-else>最后一步，激活您的账户</h2>
+          <button @click="closeModal" class="close-btn" aria-label="关闭">&times;</button>
         </header>
 
         <main class="modal-body">
-          <!-- View 1: OTP Verification -->
-          <div v-if="formMode === 'verify'" class="verify-view">
-            <p class="verify-info">我们已向 <strong>{{ registerForm.email }}</strong> 发送了一个6位数验证码，请在下方输入以完成注册。</p>
-            <form @submit.prevent="handleVerifyOtp" :class="{ 'is-shaking': isShaking }">
-              <div class="form-group">
-                <input
-                  type="text"
-                  id="otp-code"
-                  class="otp-input"
-                  v-model="otpCode"
-                  required
-                  maxlength="6"
-                  autocomplete="one-time-code"
-                  pattern="\d{6}"
-                  placeholder="------"
-                />
+          <div v-if="formMode === 'verify'">
+            <p v-if="status.success" class="success-message">{{ status.success }}</p>
+
+            <div class="info-block">
+              <p class="info-text-main">
+                请点击邮件中的 **确认链接** 来完成注册。
+              </p>
+              <p class="info-text-secondary">
+                或者，为了方便，您也可以在下方输入邮件中的6位验证码。
+              </p>
+            </div>
+
+            <form @submit.prevent="handleVerifyOtp">
+              <div class="form-group otp-group" @paste="handleOtpPaste">
+                <template v-for="i in 6" :key="i">
+                  <input :ref="el => otpInputRefs[i - 1] = el" v-model="form.otp[i-1]" type="text" inputmode="numeric" maxlength="1" class="otp-input" required @input="handleOtpInput($event, i)" @keydown="handleOtpKeyDown($event, i)" />
+                </template>
               </div>
-              <button type="submit" class="btn btn-primary" :disabled="loading">
-                <span v-if="loading" class="spinner"></span><span v-else>验证并登录</span>
+              <button type="submit" class="btn btn-primary" :disabled="status.loading">
+                <span v-if="status.loading" class="spinner"></span>
+                <span v-else>验证并登录</span>
               </button>
             </form>
           </div>
 
-          <!-- View 2: Login Form -->
-          <form v-else-if="formMode === 'login'" @submit.prevent="handleLogin" :class="{ 'is-shaking': isShaking }">
+          <form v-else @submit.prevent="formMode === 'login' ? handleLogin() : handleRegister()">
             <div class="form-group">
-              <label for="login-email">邮箱</label>
-              <input type="email" id="login-email" v-model="loginForm.email" required autocomplete="email" />
+              <label for="email">邮箱</label>
+              <input ref="firstInput" type="email" id="email" v-model="form.email" required autocomplete="email" />
             </div>
             <div class="form-group">
               <div class="label-group">
-                <label for="login-password">密码</label>
-                <a href="#" @click.prevent="handlePasswordReset" class="link-secondary">忘记密码？</a>
+                <label for="password">密码 <span v-if="formMode === 'register'">(至少6位)</span></label>
+                <a v-if="formMode === 'login'" href="#" @click.prevent="handlePasswordReset" class="link-secondary">忘记密码？</a>
               </div>
-              <input type="password" id="login-password" v-model="loginForm.password" required autocomplete="current-password" />
+              <input type="password" id="password" v-model="form.password" required :minlength="formMode === 'register' ? 6 : null" autocomplete="current-password" />
             </div>
-            <button type="submit" class="btn btn-primary" :disabled="loading">
-              <span v-if="loading" class="spinner"></span><span v-else>登录</span>
+            <div v-if="formMode === 'register'" class="form-group">
+              <label for="confirmPassword">确认密码</label>
+              <input type="password" id="confirmPassword" v-model="form.confirmPassword" required minlength="6" autocomplete="new-password" />
+            </div>
+            <button type="submit" class="btn btn-primary" :disabled="status.loading">
+              <span v-if="status.loading" class="spinner"></span>
+              <span v-else>{{ formMode === 'login' ? '登录' : '注册' }}</span>
             </button>
           </form>
 
-          <!-- View 3: Register Form -->
-          <form v-else @submit.prevent="handleRegister">
-            <div class="form-group">
-              <label for="reg-email">邮箱</label>
-              <input type="email" id="reg-email" v-model="registerForm.email" required autocomplete="email"/>
-            </div>
-            <div class="form-group">
-              <label for="reg-password">密码 (至少6位)</label>
-              <input type="password" id="reg-password" v-model="registerForm.password" required minlength="6" autocomplete="new-password"/>
-            </div>
-            <div class="form-group">
-              <label for="reg-confirm-password">确认密码</label>
-              <input type="password" id="reg-confirm-password" v-model="registerForm.confirmPassword" required minlength="6" autocomplete="new-password"/>
-            </div>
-            <button type="submit" class="btn btn-primary" :disabled="loading">
-              <span v-if="loading" class="spinner"></span><span v-else>注册</span>
-            </button>
-          </form>
-
-          <!-- Dynamic Message Area -->
-          <div class="message-area" v-if="formMode !== 'verify'">
-            <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
-            <p v-if="successMessage" class="success-message">{{ successMessage }}</p>
-            <a v-if="showResendLink && !loading" href="#" @click.prevent="handleResendConfirmation" class="link-resend">
+          <div class="message-area">
+            <p v-if="status.error" class="error-message">{{ status.error }}</p>
+            <p v-if="status.success && formMode !== 'verify'" class="success-message">{{ status.success }}</p>
+            <a v-if="status.showResendLink && !status.loading" href="#" @click.prevent="handleResendConfirmation" class="link-resend">
               没有收到邮件？点击重新发送
             </a>
           </div>
-          <!-- OTP view has its own message display -->
-           <div class="message-area" v-if="formMode === 'verify'">
-             <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
-           </div>
 
-
-          <!-- Separator & GitHub Login -->
           <div v-if="formMode !== 'verify'">
             <div class="separator"><span>或</span></div>
             <div class="auth-providers">
-              <button @click="handleGithubLogin" class="provider-btn">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12,2A10,10,0,0,0,2,12C2,16.42,4.87,20.17,8.84,21.5C9.34,21.58,9.5,21.27,9.5,21V19.21C6.73,19.64,6.15,17.92,6.15,17.92C5.69,16.79,5.07,16.5,5.07,16.5C4.17,15.88,5.15,15.9,5.15,15.9C6.12,15.96,6.63,16.93,6.63,16.93C7.5,18.45,8.97,18,9.54,17.76C9.63,17.11,9.89,16.67,10.17,16.42C7.95,16.17,5.62,15.31,5.62,11.5C5.62,10.39,6,9.5,6.65,8.79C6.55,8.54,6.2,7.5,6.75,6.15C6.75,6.15,7.59,5.88,9.5,7.17C10.29,6.95,11.15,6.84,12,6.84C12.85,6.84,13.71,6.95,14.5,7.17C16.41,5.88,17.25,6.15,17.25,6.15C17.8,7.5,17.45,8.54,17.35,8.79C18,9.5,18.38,10.39,18.38,11.5C18.38,15.32,16.04,16.16,13.81,16.41C14.17,16.72,14.5,17.33,14.5,18.26V21C14.5,21.27,14.66,21.59,15.17,21.5C19.14,20.16,22,16.42,22,12A10,10,0,0,0,12,2Z"/></svg>
+              <button @click="handleGithubLogin" class="provider-btn" :disabled="status.loading">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12,2A10,10,0,0,0,2,12C2,16.42,4.87,20.17,8.84,21.5C9.34,21.58,9.5,21.27,9.5,21V19.21C6.73,19.64,6.15,17.92,6.15,17.92C5.69,16.79,5.07,16.5,5.07,16.5C4.17,15.88,5.15,15.9,5.15,15.9C6.12,15.96,6.63,16.93,6.63,16.93C7.5,18.45,8.97,18,9.54,17.76C9.63,17.11,9.89,16.67,10.17,16.42C7.95,16.17,5.62,15.31,5.62,11.5C5.62,10.39,6,9.5,6.65,8.79C6.55,8.54,6.2,7.5,6.75,6.15C6.75,6.15,7.59,5.88,9.5,7.17C10.29,6.95,11.15,6.84,12,6.84C12.85,6.84,13.71,6.95,14.5,7.17C16.41,5.88,17.25,6.15,17.25,6.15C17.8,7.5,17.45,8.54,17.35,8.79C18,9.5,18.38,10.39,18.38,11.5C18.38,15.32,16.04,16.16,13.81,16.41C14.17,16.72,14.5,17.33,14.5,18.26V21C14.5,21.27,14.66,21.59,15.17,21.5C19.14,20.16,22,16.42,22,12A10,10,0,0,0,12,2Z"/></svg>
                 <span>使用 GitHub 继续</span>
               </button>
             </div>
@@ -276,79 +290,123 @@ async function handleResendConfirmation() {
 </template>
 
 <style lang="scss" scoped>
-/* Shake Animation */
+@use '@/assets/styles/index.scss' as *;
+
 @keyframes shake {
   10%, 90% { transform: translateX(-1px); }
   20%, 80% { transform: translateX(2px); }
   30%, 50%, 70% { transform: translateX(-4px); }
   40%, 60% { transform: translateX(4px); }
 }
-
-form.is-shaking {
-  animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+.modal-fade-enter-active, .modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+  .modal-container { transition: transform 0.3s ease; }
 }
+.modal-fade-enter-from, .modal-fade-leave-to {
+  opacity: 0;
+  .modal-container { transform: scale(0.95); }
+}
+.is-shaking { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
 
-/* Base Modal Styles */
-.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.3s ease; }
-.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 .modal-backdrop {
-  position: fixed; top: 0; left: 0;
-  width: 100%; height: 100%;
+  position: fixed; inset: 0;
   background-color: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(5px);
   display: flex; justify-content: center; align-items: center;
   z-index: 2000;
+  padding: 1rem;
 }
 .modal-container {
-  background-color: #1e1e1e;
+  background-color: var(--color-background-soft);
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  width: 90%; max-width: 420px;
+  width: 100%; max-width: 420px;
   display: flex; flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
 }
 .modal-header {
   padding: 1rem 1.5rem;
   display: flex; justify-content: space-between; align-items: center;
   border-bottom: 1px solid var(--color-border);
-  h2 { font-size: 1.25rem; color: var(--color-heading); }
 }
-.close-btn { background: none; border: none; font-size: 2rem; color: var(--color-text); cursor: pointer; line-height: 1; }
-.modal-body { padding: 1.5rem; }
+.modal-title {
+  font-size: 1.25rem;
+  color: var(--color-heading);
+  margin: 0;
+}
+.close-btn {
+  background: none; border: none; font-size: 2rem;
+  color: var(--color-text-dark);
+  cursor: pointer; line-height: 1;
+  transition: color 0.2s;
+  &:hover { color: var(--color-primary); }
+}
+.modal-body {
+  padding: 1.5rem;
+}
 .modal-footer {
   padding: 1rem 1.5rem;
-  background-color: #242424;
+  background-color: var(--color-background-mute);
   border-top: 1px solid var(--color-border);
   text-align: center;
   font-size: 0.9rem;
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
   p { margin: 0; color: var(--color-text-dark); }
-  a { color: var(--color-primary); font-weight: 600; text-decoration: none; &:hover { text-decoration: underline;} }
+  a {
+    color: var(--color-primary);
+    font-weight: 600;
+    text-decoration: none;
+    &:hover { text-decoration: underline;}
+  }
 }
 
-/* Form Styles */
 .form-group {
   margin-bottom: 1.25rem;
-  .label-group {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-  }
-  label {
-    display: block;
-    font-size: 0.9rem;
-    color: var(--color-text-dark);
-  }
-  input {
-    width: 100%; padding: 0.75rem;
-    background-color: #2a2a2a; border: 1px solid var(--color-border);
-    border-radius: 8px; color: var(--color-text); font-size: 1rem;
-    transition: border-color 0.2s;
-    &:focus { border-color: var(--color-primary); outline: none; }
+}
+.label-group {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.5rem;
+}
+label {
+  display: block; font-size: 0.9rem;
+  color: var(--color-text);
+  font-weight: 500;
+  span { font-weight: 400; color: var(--color-text-dark); }
+}
+input {
+  width: 100%; padding: 0.75rem;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border-hover);
+  border-radius: 8px; color: var(--color-text);
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  &:focus {
+    border-color: var(--color-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.2);
   }
 }
 
+.otp-group {
+  display: flex; gap: 0.5rem; justify-content: center;
+}
+.otp-input {
+  width: 45px; height: 50px; text-align: center;
+  font-size: 1.75rem; font-weight: 600;
+  padding: 0.5rem;
+}
+
+.btn.btn-primary {
+  width: 100%; padding: 0.8rem;
+  background-color: var(--color-primary);
+  color: #1a1a1a;
+  border: none; border-radius: 8px;
+  font-weight: 600; cursor: pointer;
+  transition: background-color 0.2s;
+  &:hover:not(:disabled) { background-color: var(--color-primary-dark); }
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
+}
 .link-secondary {
   font-size: 0.875rem;
   color: var(--color-text-dark);
@@ -358,32 +416,28 @@ form.is-shaking {
     text-decoration: underline;
   }
 }
-
-.btn.btn-primary {
-  width: 100%; padding: 0.8rem;
-  background-color: var(--color-primary); color: #1a1a1a;
-  border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
-  transition: background-color 0.2s;
-  &:hover:not(:disabled) { background-color: var(--color-primary-dark); }
-  &:disabled { opacity: 0.6; cursor: not-allowed; }
-}
-.spinner {
-  display: inline-block; width: 1.2em; height: 1.2em;
-  border: 2px solid currentColor; border-top-color: transparent;
-  border-radius: 50%; animation: spin 0.6s linear infinite;
+.link-resend {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--color-primary);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  &:hover { text-decoration: underline; }
 }
 
-/* Message & Provider Styles */
 .message-area {
   min-height: 24px;
   margin-top: 1rem;
   text-align: center;
 }
 .error-message, .success-message {
-  padding: 0.75rem;
-  border-radius: 8px;
+  padding: 0.75rem; border-radius: 8px;
   font-size: 0.9rem;
-  margin: 0 0 0.5rem;
+  margin: 0 0 1rem;
+  line-height: 1.5;
+  text-align: left;
 }
 .error-message {
   color: #f87171;
@@ -393,51 +447,56 @@ form.is-shaking {
   color: #4ade80;
   background-color: rgba(74, 222, 128, 0.1);
 }
-.link-resend {
-  font-size: 0.9rem;
-  color: var(--color-primary);
-  font-weight: 500;
-  text-decoration: none;
-  &:hover { text-decoration: underline; }
+
+.info-block {
+  margin: 1rem 0 1.5rem;
+  padding: 1rem;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  text-align: center;
+}
+.info-text-main {
+  font-size: 1rem;
+  color: var(--color-text);
+  margin: 0 0 0.5rem;
+  line-height: 1.6;
+}
+.info-text-secondary {
+  font-size: 0.875rem;
+  color: var(--color-text-dark);
+  margin: 0;
+  line-height: 1.6;
 }
 
 .separator {
   display: flex; align-items: center; text-align: center;
-  margin: 1.5rem 0; color: var(--color-text-dark);
+  margin: 1.5rem 0;
+  color: var(--color-text-dark);
   &::before, &::after {
-    content: ''; flex: 1; border-bottom: 1px solid var(--color-border);
+    content: ''; flex: 1;
+    border-bottom: 1px solid var(--color-border);
   }
   span { padding: 0 1rem; }
 }
 .provider-btn {
-  width: 100%; padding: 0.8rem 1.5rem;
+  width: 100%; padding: 0.75rem 1.5rem;
   border-radius: 8px; border: 1px solid var(--color-border);
-  background: transparent; color: var(--color-heading); font-weight: 500;
-  cursor: pointer; display: flex; justify-content: center; align-items: center;
-  gap: 0.75rem; transition: background-color 0.2s;
-  &:hover { background: #2a2a2a; }
+  background: transparent; color: var(--color-heading);
+  font-weight: 500; cursor: pointer;
+  display: flex; justify-content: center; align-items: center;
+  gap: 0.75rem;
+  transition: background-color 0.2s;
+  &:hover:not(:disabled) { background-color: var(--color-background-mute); }
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
 }
-
-/* OTP Verification View Styles */
-.verify-view {
-  text-align: center;
-  .verify-info {
-    color: var(--color-text-dark);
-    line-height: 1.6;
-    margin-bottom: 1.5rem;
-  }
-  .otp-input {
-    text-align: center;
-    font-size: 1.75rem;
-    font-weight: 600;
-    letter-spacing: 0.5rem;
-    color: var(--color-heading);
-    padding: 0.75rem;
-    &::-webkit-outer-spin-button,
-    &::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-  }
+.spinner {
+  display: inline-block; width: 1.2em; height: 1.2em;
+  border: 2px solid currentColor; border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
