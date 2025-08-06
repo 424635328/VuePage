@@ -1,0 +1,210 @@
+/* ==================================================
+   基础动画关键帧定义
+   ================================================== */
+
+/* 1. 透明度动画 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes fadeInOut {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+/* 2. 位移动画 */
+@keyframes slideInUp {
+  from { transform: translateY(50px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInDown {
+  from { transform: translateY(-50px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-50px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(50px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOutUp {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-50px); opacity: 0; }
+}
+
+@keyframes slideOutDown {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(50px); opacity: 0; }
+}
+
+/* 3. 缩放动画 */
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes scaleOut {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.8); opacity: 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* 4. 旋转动画 */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spinReverse {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+
+/* 5. 背景/颜色动画 */
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes colorPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.2); }
+}
+
+/* 6. 特殊效果动画 */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes glitch {
+  0%, 100% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+}
+
+/* ==================================================
+   动画类名（直接应用于元素）
+   ================================================== */
+
+/* 基础配置：动画时长、缓动函数 */
+.anim-fast { animation-duration: 0.3s; }
+.anim-normal { animation-duration: 0.6s; }
+.anim-slow { animation-duration: 1s; }
+.anim-extra-slow { animation-duration: 2s; }
+
+.anim-ease-in { animation-timing-function: ease-in; }
+.anim-ease-out { animation-timing-function: ease-out; }
+.anim-ease-in-out { animation-timing-function: ease-in-out; }
+.anim-linear { animation-timing-function: linear; }
+
+.anim-fill-forwards { animation-fill-mode: forwards; }
+.anim-fill-backwards { animation-fill-mode: backwards; }
+.anim-fill-both { animation-fill-mode: both; }
+
+.anim-infinite { animation-iteration-count: infinite; }
+
+/* 透明度动画类 */
+.anim-fade-in { animation-name: fadeIn; }
+.anim-fade-out { animation-name: fadeOut; }
+.anim-fade-in-out { animation-name: fadeInOut; }
+
+/* 位移动画类 */
+.anim-slide-in-up { animation-name: slideInUp; }
+.anim-slide-in-down { animation-name: slideInDown; }
+.anim-slide-in-left { animation-name: slideInLeft; }
+.anim-slide-in-right { animation-name: slideInRight; }
+.anim-slide-out-up { animation-name: slideOutUp; }
+.anim-slide-out-down { animation-name: slideOutDown; }
+
+/* 缩放动画类 */
+.anim-scale-in { animation-name: scaleIn; }
+.anim-scale-out { animation-name: scaleOut; }
+.anim-pulse { animation-name: pulse; }
+
+/* 旋转动画类 */
+.anim-spin { animation-name: spin; }
+.anim-spin-reverse { animation-name: spinReverse; }
+.anim-wiggle { animation-name: wiggle; }
+
+/* 特殊效果类 */
+.anim-float { animation-name: float; }
+.anim-shake { animation-name: shake; }
+.anim-scanline { animation-name: scanline; }
+.anim-glitch { animation-name: glitch; }
+.anim-gradient-shift {
+  animation-name: gradientShift;
+  background-size: 200% 200%; /* 渐变位移必备 */
+}
+.anim-color-pulse { animation-name: colorPulse; }
+
+/* ==================================================
+   复合动画（常用组合）
+   ================================================== */
+.anim-pop {
+  animation: scaleIn 0.3s ease-out, pulse 1.5s ease-in-out 0.3s infinite;
+}
+
+.anim-float-fade {
+  animation: float 3s ease-in-out infinite, fadeInOut 4s ease-in-out infinite;
+}
+
+.anim-slide-fade-in {
+  animation: slideInUp 0.6s ease-out, fadeIn 0.6s ease-out;
+}
+
+/* ==================================================
+   过渡效果（用于交互状态切换）
+   ================================================== */
+.transition-all { transition: all 0.3s ease; }
+.transition-transform { transition: transform 0.3s ease; }
+.transition-opacity { transition: opacity 0.3s ease; }
+.transition-color { transition: background-color 0.3s ease, color 0.3s ease; }
+.transition-shadow { transition: box-shadow 0.3s ease; }
+
+/* 悬停效果增强 */
+.hover-lift { transition: transform 0.3s ease; }
+.hover-lift:hover { transform: translateY(-3px); }
+
+.hover-scale { transition: transform 0.3s ease; }
+.hover-scale:hover { transform: scale(1.03); }
+
+.hover-glow { transition: box-shadow 0.3s ease; }
+.hover-glow:hover { box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }

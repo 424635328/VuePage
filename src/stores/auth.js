@@ -63,7 +63,7 @@ export const useAuthStore = defineStore('auth', () => {
   /**
    * 使用邮箱和密码登录。
    */
-  // ✨ 核心修复：让 signInWithPassword 主动更新状态
+  // 让 signInWithPassword 主动更新状态
   async function signInWithPassword({ email, password }) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error

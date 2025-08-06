@@ -1,4 +1,4 @@
-<!--  -->
+<!-- src/views/PasswordResetPage.vue -->
 
 <script setup>
 import { reactive } from 'vue';

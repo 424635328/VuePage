@@ -18,7 +18,7 @@ const props = defineProps({
   starCount: { type: Number, default: 150 },
 
   // --- 内容定制 ---
-  neonSignText: { type: String, default: 'AURORA' },
+  neonSignText: { type: String, default: 'MHStudio' },
 });
 
 // ============================================================================

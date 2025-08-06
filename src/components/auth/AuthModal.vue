@@ -43,7 +43,7 @@ function closeModal() {
   setTimeout(resetState, 300);
 }
 
-// ✨ 修复：修改 _handleSubmit，使其返回布尔值表示成功或失败
+//  修改 _handleSubmit，使其返回布尔值表示成功或失败
 async function _handleSubmit(action) {
   status.loading = true;
   status.error = '';
@@ -65,7 +65,7 @@ async function _handleSubmit(action) {
   }
 }
 
-// ✨ 修复：重构 handleLogin 以解决竞态条件
+// 重构 handleLogin 以解决竞态条件
 async function handleLogin() {
   // 1. 调用包装器执行核心登录请求，并等待其结果
   const loginSuccessful = await _handleSubmit(async () => {

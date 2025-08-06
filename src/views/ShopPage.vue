@@ -95,7 +95,7 @@ async function handleCopyLink(product) {
   <div class="shop-page">
     <div class="container">
       <header class="shop-header">
-        <h1>我的商店</h1>
+        <h1>On Sale</h1>
         <p v-if="user" class="fade-in">欢迎回来, <strong>{{ user.email }}</strong></p>
         <p v-else class="fade-in">创建、管理和分享您的专属数字产品</p>
       </header>
