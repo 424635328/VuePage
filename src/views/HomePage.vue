@@ -1,29 +1,22 @@
-<!-- src/views/HomePage.vue -->
 <template>
   <div class="home-page">
-    <!-- 1. 集成蒙版加载器 -->
-    <!-- 使用 v-model 控制其显示，并传入自定义 props -->
-    <MaskLoader v-model:active="isMaskActive" enter-text="光启未来" :background-opacity="0.85" />
+    <MaskLoader
+      v-if="isMaskActive"
+      v-model:active="isMaskActive"
+      enter-text="MHStudio"
+      :background-opacity="0.85"
+    />
 
-    <!-- 2. 延迟渲染主内容 -->
-    <!-- 仅当蒙版消失后，才挂载这部分 DOM，提升初始性能 -->
-    <div v-if="contentVisible" class="container">
-      <!--
-        Hero Section: 动画类保持不变，但其触发由新的 JS 逻辑控制
-      -->
+    <div v-else class="container">
       <section ref="heroSectionRef" class="hero-section fade-in-section">
         <h1 class="hero-title">构建未来，用代码驱动创新</h1>
         <p class="hero-subtitle">我们是 MHStudio，专注于提供高性能、高颜值的数字化解决方案，助力您的业务腾飞。</p>
         <router-link to="/projects" class="cta-button">探索我们的产品</router-link>
       </section>
 
-      <!--
-        Features Section: 动画类保持不变
-      -->
       <section ref="featuresSectionRef" class="features-section fade-in-section">
         <h2 class="section-title">核心技术栈</h2>
         <div class="features-grid">
-          <!-- FeatureCard 组件保持不变 -->
           <FeatureCard title="Vue.js 生态" description="精通 Vue 3、Vue Router、Pinia、Vite，并拥有丰富的项目实践经验。">
             <template #icon><svg viewBox="0 0 256 221" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid"><path d="M204.8 0H256L128 220.8 0 0h97.92L128 51.2 157.44 0h47.36z" fill="currentColor"/><path d="M0 0l128 220.8L256 0h-51.2L128 132.48 50.56 0H0z" fill="currentColor"/></svg></template>
           </FeatureCard>
@@ -43,59 +36,45 @@
 </template>
 
 <script setup>
-// 3. 引入所需 Vue API 和组件
 import { ref, watch, nextTick } from 'vue';
 import FeatureCard from '@/components/FeatureCard.vue';
 import MaskLoader from '@/components/MaskLoader.vue';
 
-
-// 4. 定义组件状态
-const isMaskActive = ref(true);    // 控制蒙版激活状态
-const contentVisible = ref(false); // 控制主内容是否渲染
+const isMaskActive = ref(true);
 
 const heroSectionRef = ref(null);
 const featuresSectionRef = ref(null);
 
-// 5. 监听蒙版状态，实现逻辑编排
 watch(isMaskActive, (isActive) => {
-  if (!isActive) { // 当蒙版被关闭时
-    contentVisible.value = true; // 渲染主内容
-
-    // 使用 nextTick 确保 DOM 已经更新完毕
+  if (!isActive) {
     nextTick(() => {
-      // 在内容可见后，才启动 IntersectionObserver
       setupIntersectionObserver();
     });
   }
 });
 
-/**
- * 封装 IntersectionObserver 的初始化逻辑
- */
 function setupIntersectionObserver() {
   const options = {
     root: null,
     rootMargin: '0px',
-    threshold: 0.15, // 元素可见 15% 时触发
+    threshold: 0.15,
   };
 
-  const observer = new IntersectionObserver((entries, observer) => {
+  const observer = new IntersectionObserver((entries, obs) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         entry.target.classList.add('is-visible');
-        observer.unobserve(entry.target);
+        obs.unobserve(entry.target);
       }
     });
   }, options);
 
-  // 确保 ref 对应的 DOM 元素存在再进行观察
   if (heroSectionRef.value) observer.observe(heroSectionRef.value);
   if (featuresSectionRef.value) observer.observe(featuresSectionRef.value);
 }
 </script>
 
 <style lang="scss" scoped>
-/* 容器样式 */
 .home-page {
   position: relative;
   width: 100%;
@@ -105,14 +84,11 @@ function setupIntersectionObserver() {
   max-width: 1200px;
   margin: 0 auto;
 }
-
-/* Hero Section 样式 */
 .hero-section {
   text-align: center;
   padding: 6rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
-
 .hero-title {
   font-size: 3.5rem;
   font-weight: 700;
@@ -120,18 +96,16 @@ function setupIntersectionObserver() {
   margin-bottom: 1.5rem;
   line-height: 1.2;
 }
-
 .hero-subtitle {
   font-size: 1.25rem;
   color: rgba(255, 255, 255, 0.7);
   max-width: 650px;
   margin: 0 auto 2.5rem;
 }
-
 .cta-button {
   display: inline-block;
   padding: 1rem 2.5rem;
-  background-color: #38bdf8; /* a nice sky blue */
+  background-color: #38bdf8;
   color: #0c1524;
   text-decoration: none;
   border-radius: 8px;
@@ -145,12 +119,9 @@ function setupIntersectionObserver() {
     box-shadow: 0 8px 30px -8px rgba(56, 189, 248, 0.6);
   }
 }
-
-/* Features Section 样式 */
 .features-section {
   padding: 6rem 0;
 }
-
 .section-title {
   text-align: center;
   font-size: 2.5rem;
@@ -158,42 +129,31 @@ function setupIntersectionObserver() {
   font-weight: 600;
   color: #fff;
 }
-
 .features-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 2rem;
 }
-
-
-/* --- 6. 优化后的动画样式 --- */
 .fade-in-section {
   opacity: 0;
   transform: translateY(40px);
   transition: opacity 1s cubic-bezier(0.16, 1, 0.3, 1), transform 1s cubic-bezier(0.16, 1, 0.3, 1);
-
-  /* 子元素的初始状态也设置为不可见 */
   & > * {
     opacity: 0;
     transform: translateY(20px);
     transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
-
 .fade-in-section.is-visible {
   opacity: 1;
   transform: translateY(0);
-
   & > * {
     opacity: 1;
     transform: translateY(0);
   }
-
-  /* 精心调整的交错动画延迟，让入场更有节奏感 */
   .hero-title, .section-title { transition-delay: 0.1s; }
   .hero-subtitle { transition-delay: 0.2s; }
   .cta-button { transition-delay: 0.3s; }
-
   .features-grid > * {
     &:nth-child(1) { transition-delay: 0.2s; }
     &:nth-child(2) { transition-delay: 0.3s; }
@@ -201,8 +161,6 @@ function setupIntersectionObserver() {
     &:nth-child(4) { transition-delay: 0.5s; }
   }
 }
-
-/* 响应式调整 */
 @media (max-width: 768px) {
   .container { padding: 0 1rem; }
   .hero-title { font-size: 2.8rem; }
