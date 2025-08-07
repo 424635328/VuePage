@@ -1,51 +1,56 @@
 <!-- src/views/ProductEditPage.vue -->
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import imageCompression from 'browser-image-compression';
 import draggable from 'vuedraggable';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
-import { supabase } from '@/lib/supabaseClient';
+import { useImageProcessor } from '@/composables/useImageProcessor'; // ✨ 1. 引入 Composable
 
 const props = defineProps({
   public_id: { type: String, default: null },
 });
 
+// --- Stores, Router, and Composables ---
 const router = useRouter();
 const productsStore = useProductsStore();
 const toastStore = useToastStore();
+const { processing: imagesProcessing, processFiles, revokeImageUrls } = useImageProcessor();
 
+// --- Component State ---
 const form = ref({ name: '', description: '' });
-const images = ref([]); // Holds image objects for display and sorting: { id, image_url }
-const newImageFiles = ref([]); // Holds new File objects for upload
+const images = ref([]); // Holds image objects for display and sorting: { id, image_url, file? }
 const loading = ref(true);
 const saving = ref(false);
 const error = ref(null);
+const isDraggingOver = ref(false);
 
+// --- Template Refs ---
+const fileInput = ref(null);
+
+// --- Computed Properties ---
 const isEditing = computed(() => !!props.public_id);
 const pageTitle = computed(() => isEditing.value ? '编辑商品' : '创建新商品');
 
-const fileInput = ref(null);
-
+// ✨ 2. 复用 Edge Function，一次性加载产品和图片
 async function loadProductForEditing() {
   if (!isEditing.value) {
     loading.value = false;
     return;
   }
-
+  loading.value = true;
   try {
-    const { data: productData, error: productError } = await supabase
-      .from('products').select('*').eq('public_id', props.public_id).single();
-    if (productError) throw productError;
-    form.value = productData;
-
-    const { data: imageData, error: imageError } = await supabase
-      .from('product_images').select('id, image_url').eq('product_id', productData.id).order('position');
-    if (imageError) throw imageError;
-    images.value = imageData;
-
+    const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-product-details?public_id=${props.public_id}`;
+    const response = await fetch(functionUrl);
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `服务器错误: ${response.status}`);
+    }
+    const data = await response.json();
+    form.value = { name: data.name, description: data.description, id: data.id };
+    // 将从DB加载的图片映射到我们的内部格式
+    images.value = data.images.map(img => ({ id: img.id, image_url: img.image_url, file: null }));
   } catch (e) {
     error.value = "无法加载商品数据。";
     toastStore.showToast({ msg: e.message, toastType: 'error' });
@@ -54,64 +59,43 @@ async function loadProductForEditing() {
   }
 }
 
+// --- Image Handling ---
 function triggerFileInput() {
   fileInput.value.click();
 }
 
-async function processFiles(files) {
-  if (files.length === 0) return;
-
-  const options = {
-    maxSizeMB: 1,
-    maxWidthOrHeight: 1920,
-    useWebWorker: true,
-  };
-
-  toastStore.showToast({ msg: `正在压缩 ${files.length} 张图片...`, toastType: 'success' });
-
-  try {
-    const compressionPromises = files.map(file => imageCompression(file, options));
-    const compressedFiles = await Promise.all(compressionPromises);
-
-    compressedFiles.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        images.value.push({ id: `new-${Date.now()}-${Math.random()}`, image_url: e.target.result });
-        newImageFiles.value.push(file);
-      };
-      reader.readAsDataURL(file);
-    });
-  } catch (err) {
-    console.error('Image compression failed:', err);
-    toastStore.showToast({ msg: '图片压缩失败', toastType: 'error' });
-  } finally {
-     if(fileInput.value) fileInput.value.value = '';
-  }
+async function handleFileSelection(files) {
+    const newImages = await processFiles(Array.from(files));
+    images.value.push(
+      ...newImages.map(img => ({
+        id: img.id,
+        image_url: img.previewUrl,
+        file: img.file // ✨ 3. 直接关联 File 对象
+      }))
+    );
 }
 
 async function handleFileChange(event) {
-  const files = Array.from(event.target.files);
-  await processFiles(files);
+  await handleFileSelection(event.target.files);
+  // 重置 input，以便可以再次选择相同的文件
+  if (fileInput.value) fileInput.value.value = '';
 }
 
-// 新增：处理拖拽释放事件
 async function handleDrop(event) {
-  const files = Array.from(event.dataTransfer.files);
-  await processFiles(files);
+  isDraggingOver.value = false;
+  await handleFileSelection(event.dataTransfer.files);
 }
 
-
+// ✨ 4. 简化的 removeImage 逻辑
 function removeImage(index) {
   const removedImage = images.value.splice(index, 1)[0];
-  // If it's a newly added file (transient ID is a string), remove it from the upload queue.
-  if (typeof removedImage.id === 'string' && removedImage.id.startsWith('new-')) {
-    const imageIndex = newImageFiles.value.findIndex(file => file.name === removedImage.file_name_for_removal);
-    if (imageIndex > -1) {
-      newImageFiles.value.splice(imageIndex, 1);
-    }
+  // 如果是新上传的图片（有本地预览URL），则清理它
+  if (removedImage.image_url.startsWith('blob:')) {
+      URL.revokeObjectURL(removedImage.image_url);
   }
 }
 
+// --- Form Submission ---
 async function handleSubmit() {
   if (!form.value.name.trim()) {
     toastStore.showToast({ msg: '商品名称不能为空', toastType: 'error' });
@@ -121,11 +105,14 @@ async function handleSubmit() {
   saving.value = true;
   try {
     let result;
+    // 筛选出真正需要上传的新文件和需要保留的旧图片
+    const newImageFilesForUpload = images.value.filter(img => !!img.file).map(img => img.file);
+    const existingImagesForUpdate = images.value.filter(img => !img.file);
+
     if (isEditing.value) {
-      const existingImagesForUpdate = images.value.filter(img => typeof img.id === 'number');
-      result = await productsStore.updateProduct(form.value.id, form.value, newImageFiles.value, existingImagesForUpdate);
+      result = await productsStore.updateProduct(form.value.id, form.value, newImageFilesForUpload, existingImagesForUpdate);
     } else {
-      result = await productsStore.addProduct(form.value, newImageFiles.value);
+      result = await productsStore.addProduct(form.value, newImageFilesForUpload);
     }
 
     if (result) {
@@ -133,12 +120,20 @@ async function handleSubmit() {
     }
   } catch (err) {
     console.error("Submit error:", err);
+    // toastStore 会在 store action 内部显示
   } finally {
     saving.value = false;
   }
 }
 
+// --- Lifecycle Hooks ---
 onMounted(loadProductForEditing);
+
+onUnmounted(() => {
+    // 组件卸载时，清理所有创建的本地预览 URL
+    revokeImageUrls(images.value);
+});
+
 </script>
 
 <template>
@@ -158,11 +153,11 @@ onMounted(loadProductForEditing);
       </header>
 
       <form @submit.prevent="handleSubmit" class="edit-form">
+        <!-- Name and Description fields (unchanged) -->
         <div class="form-group">
           <label for="name">商品名称 *</label>
           <input type="text" id="name" v-model.trim="form.name" required placeholder="例如：谷歌邮箱账号"/>
         </div>
-
         <div class="form-group">
           <label for="description">商品描述 (支持 Markdown ### 标题和 - 列表)</label>
           <textarea id="description" v-model="form.description" rows="12" placeholder="在这里详细描述您的商品..."></textarea>
@@ -183,25 +178,26 @@ onMounted(loadProductForEditing);
               </template>
             </draggable>
 
-            <!-- 修改：添加拖拽事件监听器 -->
+            <!-- ✨ 5. 添加 dragover 状态 class -->
             <div
               class="upload-placeholder"
+              :class="{ 'dragover': isDraggingOver }"
               @click="triggerFileInput"
-              @dragover.prevent
-              @dragleave.prevent
+              @dragover.prevent="isDraggingOver = true"
+              @dragleave.prevent="isDraggingOver = false"
               @drop.prevent="handleDrop"
               role="button"
               aria-label="添加图片或拖拽图片到此区域"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-              <span>添加图片</span>
+              <span>{{ imagesProcessing ? '处理中...' : '添加图片' }}</span>
             </div>
           </div>
         </div>
 
         <div class="form-actions">
            <button type="button" @click="router.push('/shop')" class="btn btn-secondary">取消</button>
-           <button type="submit" class="btn btn-primary" :disabled="saving">
+           <button type="submit" class="btn btn-primary" :disabled="saving || imagesProcessing">
              <span v-if="saving" class="spinner"></span>
              <span v-else>保存商品</span>
            </button>
@@ -212,8 +208,8 @@ onMounted(loadProductForEditing);
 </template>
 
 <style lang="scss" scoped>
+/* All styles from the original file remain the same, with one addition for .dragover */
 @use '@/assets/styles/index.scss' as *;
-
 .edit-page {
   padding: 4rem 0;
   animation: fadeIn 0.5s ease-out;
@@ -359,14 +355,14 @@ onMounted(loadProductForEditing);
   align-items: center;
   color: var(--color-text-dark);
   cursor: pointer;
-  transition: border-color 0.2s, color 0.2s, background-color 0.2s; // 添加背景色过渡
+  transition: border-color 0.2s, color 0.2s, background-color 0.2s;
 
   span {
     font-size: 0.9rem;
     margin-top: 0.5rem;
   }
 
-  &:hover, &.dragover { // 添加拖拽悬浮时的样式
+  &:hover, &.dragover {
     border-color: var(--color-primary);
     color: var(--color-primary);
     background-color: rgba(var(--color-primary-rgb), 0.1);

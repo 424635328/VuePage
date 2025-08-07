@@ -1,14 +1,15 @@
 <!-- src/views/ProductDetailsPage.vue -->
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
+import { useHead } from '@vueuse/head';
 import { useAuthStore } from '@/stores/auth';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
-import { supabase } from '@/lib/supabaseClient';
+// 不再需要直接导入 supabase
 
 const props = defineProps({
   public_id: {
@@ -17,19 +18,22 @@ const props = defineProps({
   },
 });
 
+// --- State ---
 const product = ref(null);
 const images = ref([]);
 const currentImage = ref('');
 const loading = ref(true);
 const error = ref(null);
+const isConfirmModalOpen = ref(false);
 
+// --- Stores and Router ---
 const router = useRouter();
 const authStore = useAuthStore();
 const productsStore = useProductsStore();
 const toastStore = useToastStore();
 const { user } = storeToRefs(authStore);
 
-const isConfirmModalOpen = ref(false);
+// --- Computed Properties ---
 const isOwner = computed(() => user.value && product.value && user.value.id === product.value.user_id);
 
 const contentBlocks = computed(() => {
@@ -37,9 +41,9 @@ const contentBlocks = computed(() => {
   const rawText = product.value.description;
   const parts = rawText.split(/\n### /);
   const blocks = [];
-  if (parts[0] && !parts[0].startsWith('### ')) {
-      const mainDesc = parts.shift().trim();
-      if(mainDesc) blocks.push({ title: null, content: mainDesc.replace(/^- /gm, '• ').replace(/\n/g, '<br />') });
+  if (parts.length > 0 && !parts[0].startsWith('### ')) {
+    const mainDesc = parts.shift().trim();
+    if(mainDesc) blocks.push({ title: null, content: mainDesc.replace(/^- /gm, '• ').replace(/\n/g, '<br />') });
   }
   parts.forEach(part => {
     const lines = part.split('\n');
@@ -50,24 +54,35 @@ const contentBlocks = computed(() => {
   return blocks;
 });
 
-function updateMetaTags(productData, firstImage) {
-  document.title = `${productData.name} | MHStudio`;
-  const updateOrCreateMeta = (property, content) => {
-    let el = document.querySelector(`meta[property='${property}']`);
-    if (!el) {
-      el = document.createElement('meta');
-      el.setAttribute('property', property);
-      document.head.appendChild(el);
-    }
-    el.setAttribute('content', content || '');
+const formattedDate = (d) => d ? new Date(d).toLocaleString('zh-CN', { dateStyle: 'long', timeStyle: 'short' }) : 'N/A';
+const lastUpdated = computed(() => product.value ? formattedDate(product.value.updated_at || product.value.created_at) : '');
+
+// --- SEO & Meta Tags Management ---
+useHead(computed(() => {
+  const p = product.value;
+  if (!p) {
+    return { title: '商品详情 | MHStudio' };
+  }
+  const descriptionText = p.description?.split(/\n### /)[0].substring(0, 150) + '...' || '查看商品详情。';
+  const imageUrl = currentImage.value || p.thumbnail_url || `${window.location.origin}/LOGO.jpeg`;
+
+  return {
+    title: `${p.name} | MHStudio`,
+    meta: [
+      { property: 'og:title', content: p.name },
+      { property: 'og:description', content: descriptionText },
+      { property: 'og:image', content: imageUrl },
+      { property: 'og:url', content: window.location.href },
+      { property: 'og:type', content: 'website' },
+    ],
   };
-  const descriptionText = productData.description.split(/\n### /)[0].substring(0, 150) + '...';
-  const imageUrl = firstImage || productData.thumbnail_url || `${window.location.origin}/LOGO.jpeg`;
-  updateOrCreateMeta('og:title', productData.name);
-  updateOrCreateMeta('og:description', descriptionText);
-  updateOrCreateMeta('og:image', imageUrl);
-  updateOrCreateMeta('og:url', window.location.href);
-  updateOrCreateMeta('og:type', 'website');
+}));
+
+// --- Methods ---
+function applyProductData(data) {
+  product.value = data;
+  images.value = data.images || [];
+  currentImage.value = images.value.length > 0 ? images.value[0].image_url : (data.thumbnail_url || '/placeholder.svg');
 }
 
 async function loadProductData() {
@@ -76,30 +91,18 @@ async function loadProductData() {
   try {
     const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-product-details?public_id=${props.public_id}`;
     const response = await fetch(functionUrl);
+
     if (!response.ok) {
-        let errorData = { error: `服务器错误: ${response.status}` };
-        try {
-            errorData = await response.json();
-        } catch (_e) {
-            console.error('无法解析错误响应:', _e);
-        }
-        throw new Error(errorData.error || `服务器错误: ${response.status}`);
+      const errorData = await response.json().catch(() => ({ error: `服务器错误: ${response.status}` }));
+      throw new Error(errorData.error || `服务器错误: ${response.status}`);
     }
+
     const data = await response.json();
-    product.value = data;
-
-    const { data: imageData, error: imageError } = await supabase
-      .from('product_images').select('id, image_url').eq('product_id', data.id).order('position');
-    if (imageError) throw imageError;
-
-    images.value = imageData;
-    currentImage.value = imageData.length > 0 ? imageData[0].image_url : (data.thumbnail_url || '');
-
-    updateMetaTags(data, currentImage.value);
+    applyProductData(data);
   } catch (e) {
     error.value = e.message;
     toastStore.showToast({ msg: `获取商品详情失败: ${e.message}`, toastType: 'error' });
-    console.error('获取商品详情失败:', e.message);
+    console.error('获取商品详情失败:', e);
   } finally {
     loading.value = false;
   }
@@ -110,7 +113,9 @@ function selectImage(url) {
 }
 
 function handleEdit() {
-  router.push({ name: 'product-edit', params: { public_id: product.value.public_id } });
+  if (product.value) {
+    router.push({ name: 'product-edit', params: { public_id: product.value.public_id } });
+  }
 }
 
 function handleDelete() {
@@ -126,9 +131,11 @@ async function confirmDeletion() {
 }
 
 async function shareProduct() {
+  const p = product.value;
+  if (!p) return;
   const shareData = {
-    title: product.value.name,
-    text: product.value.description.split(/\n### /)[0],
+    title: p.name,
+    text: p.description.split(/\n### /)[0],
     url: window.location.href,
   };
   try {
@@ -146,15 +153,10 @@ async function shareProduct() {
   }
 }
 
+// --- Lifecycle Hooks ---
 onMounted(loadProductData);
 
-onUnmounted(() => {
-  productsStore.selectProductForDetailPage(null);
-});
-
-const formattedDate = (d) => d ? new Date(d).toLocaleString('zh-CN', { dateStyle: 'long', timeStyle: 'short' }) : 'N/A';
-const lastUpdated = computed(() => product.value ? formattedDate(product.value.updated_at || product.value.created_at) : '');
-
+// `onUnmounted` hook is no longer needed.
 </script>
 
 <template>
@@ -166,7 +168,7 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
 
     <div v-else-if="error || !product" class="error-state">
       <h2>无法找到商品</h2>
-      <p>{{ error }}</p>
+      <p>{{ error || '该商品可能已被删除或链接无效。' }}</p>
       <router-link to="/shop" class="cta-button">返回商店</router-link>
     </div>
 
@@ -192,7 +194,11 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
       <div class="details-layout">
         <aside v-if="images.length > 0" class="gallery-column fade-in-item">
           <div class="main-image-wrapper">
-            <img :src="currentImage" :alt="product.name" class="main-image" />
+            <img :src="currentImage || '/placeholder.svg'"
+                 :key="currentImage"
+                 :alt="product.name"
+                 class="main-image"
+                 @error.once="e => e.target.src = '/placeholder.svg'" />
           </div>
           <div v-if="images.length > 1" class="thumbnail-grid">
             <img v-for="img in images" :key="img.id" :src="img.image_url"
@@ -240,6 +246,7 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
 </template>
 
 <style lang="scss" scoped>
+/* All styles remain unchanged */
 @use '@/assets/styles/index.scss' as *;
 
 @keyframes fadeIn {

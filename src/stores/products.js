@@ -6,60 +6,102 @@ import { supabase } from '@/lib/supabaseClient'
 import { useAuthStore } from './auth'
 import { useToastStore } from './toast'
 
+// 定义每页加载的商品数量
+const PAGE_SIZE = 30;
+
 export const useProductsStore = defineStore('products', () => {
+  // --- 核心状态 ---
   const products = ref([])
-  const selectedProduct = ref(null)
-  const loading = ref(false)
+  const loading = ref(false) // 用于初始加载
   const error = ref(null)
+  const selectedProduct = ref(null) // 用于详情页，保持不变
+
+  // --- ✨ 新增分页状态 ---
+  const page = ref(1)
+  const hasMore = ref(true) // 是否还有更多数据可供加载
+  const loadingMore = ref(false) // 用于加载更多时的 loading 状态
 
   const authStore = useAuthStore()
   const toastStore = useToastStore()
 
-  function selectProductForDetailPage(product) {
-    selectedProduct.value = product
+  // --- ✨ 新增：重置状态并获取第一页数据 ---
+  // 这个函数将作为列表加载的入口点
+  async function resetAndFetchProducts() {
+    products.value = []
+    page.value = 1
+    hasMore.value = true
+    error.value = null
+    // 调用 fetchProducts 并传入 isReset 标志
+    await fetchProducts(true)
   }
 
-  async function fetchProducts() {
+  // --- ✨ 重构：核心的 fetch 方法，支持分页和重置 ---
+  async function fetchProducts(isReset = false) {
     if (!authStore.user) return
-    loading.value = true
+    // 防止在加载更多时重复触发
+    if (loadingMore.value || !hasMore.value) return
+
+    if (isReset) {
+      loading.value = true
+    } else {
+      loadingMore.value = true
+    }
     error.value = null
+
     try {
+      // 计算 Supabase 的 range
+      const from = (page.value - 1) * PAGE_SIZE
+      const to = from + PAGE_SIZE - 1
+
       const { data, error: fetchError } = await supabase
         .from('products')
         .select('*')
         .eq('user_id', authStore.user.id)
         .order('created_at', { ascending: false })
+        .range(from, to) // ✨ 关键：使用 .range() 实现分页
 
       if (fetchError) throw fetchError
-      products.value = data
+
+      if (data && data.length > 0) {
+        // 将新获取的数据追加到现有数组
+        products.value.push(...data)
+        page.value++ // 准备加载下一页
+        // 如果返回的数据量小于请求的页面大小，说明是最后一页
+        if (data.length < PAGE_SIZE) {
+          hasMore.value = false
+        }
+      } else {
+        // 如果没有数据返回，说明已经没有更多了
+        hasMore.value = false
+      }
     } catch (e) {
       error.value = e.message
-      toastStore.showToast({ msg: `获取商品失败: ${e.message}`, toastType: 'error' });
+      toastStore.showToast({ msg: `获取商品失败: ${e.message}`, toastType: 'error' })
     } finally {
-      loading.value = false
+      if (isReset) {
+        loading.value = false
+      } else {
+        loadingMore.value = false
+      }
     }
   }
 
+  // --- ✨ 更新：清空商品时也重置分页状态 ---
   function clearProducts() {
     products.value = []
+    page.value = 1
+    hasMore.value = true
+    error.value = null
+    loading.value = false
+    loadingMore.value = false
   }
 
-  async function uploadProductImage(file) {
-    if (!authStore.user) throw new Error('用户未登录，无法上传。')
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
-    const filePath = `${authStore.user.id}/${fileName}`
-    const { error: uploadError } = await supabase.storage
-      .from('product-images')
-      .upload(filePath, file)
-    if (uploadError) throw uploadError
-    const { data } = supabase.storage
-      .from('product-images')
-      .getPublicUrl(filePath)
-    return data.publicUrl
-  }
+  // --- 以下 CRUD 操作保持不变，因为它们是高效的本地操作 ---
+  // 它们直接修改 state，避免了重新请求整个列表
 
   async function addProduct(productData, imageFiles) {
+    // ... 此函数逻辑完全保持不变 ...
+    // 它通过 unshift 在本地数组顶部添加新项，这是最高效的方式。
     loading.value = true;
     error.value = null;
     try {
@@ -109,6 +151,8 @@ export const useProductsStore = defineStore('products', () => {
   }
 
   async function updateProduct(productId, productData, newImageFiles, existingImages) {
+    // ... 此函数逻辑完全保持不变 ...
+    // 它在本地数组中找到并替换已更新的项，同样高效。
     loading.value = true;
     error.value = null;
     try {
@@ -172,6 +216,9 @@ export const useProductsStore = defineStore('products', () => {
   }
 
   async function deleteProduct(productId) {
+    // ... 此函数逻辑完全保持不变 ...
+    // 它从本地数组中过滤掉已删除的项，无需网络请求刷新列表。
+    // 注意：这里原有的 loading.value = true; 是可以保留的，因为它给用户一个删除操作正在进行的反馈
     loading.value = true;
     error.value = null;
     try {
@@ -211,16 +258,45 @@ export const useProductsStore = defineStore('products', () => {
     }
   }
 
+  async function uploadProductImage(file) {
+    // ... 此函数逻辑完全保持不变 ...
+    if (!authStore.user) throw new Error('用户未登录，无法上传。')
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+    const filePath = `${authStore.user.id}/${fileName}`
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, file)
+    if (uploadError) throw uploadError
+    const { data } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(filePath)
+    return data.publicUrl
+  }
+
+  function selectProductForDetailPage(product) {
+    // ... 此函数逻辑完全保持不变 ...
+    selectedProduct.value = product
+  }
+
+
+  // --- 返回所有 state 和 actions ---
   return {
+    // 原有 state 和 actions
     products,
     selectedProduct,
     loading,
     error,
-    fetchProducts,
     addProduct,
     updateProduct,
     deleteProduct,
-    clearProducts,
+    clearProducts, // 已更新
     selectProductForDetailPage,
+
+    // ✨ 新增/重构的 state 和 actions
+    hasMore,
+    loadingMore,
+    fetchProducts, // 用于加载更多
+    resetAndFetchProducts, // 用于初始加载
   }
 })

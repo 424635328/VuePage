@@ -1,61 +1,96 @@
 <!-- src/views/ShopPage.vue -->
 
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
+
+// 引入虚拟滚动库和其样式
+import { RecycleScroller } from 'vue-virtual-scroller';
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
+
 import ProductCard from '@/components/shop/ProductCard.vue';
 import FloatingActions from '@/components/shop/FloatingActions.vue';
 import AuthModal from '@/components/auth/AuthModal.vue';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
 
+// --- Stores and Router ---
 const authStore = useAuthStore();
 const { user, loading: authLoading } = storeToRefs(authStore);
 
 const productsStore = useProductsStore();
-const { products, loading: productsLoading, error } = storeToRefs(productsStore);
+// 从 store 中获取分页相关的状态
+const { products, loading: productsLoading, loadingMore, hasMore, error } = storeToRefs(productsStore);
 
 const toastStore = useToastStore();
 const router = useRouter();
 
-// State for modals
+// --- Component State ---
 const isAuthModalOpen = ref(false);
 const isConfirmModalOpen = ref(false);
-
-// State for data being acted upon
 const productToDelete = ref(null);
 
-// ✨ 修复：这个 watcher 现在是响应UI变化的主要驱动力
+// 为 IntersectionObserver 创建 Ref 和实例变量
+const loadMoreTrigger = ref(null);
+let observer = null;
+
+// --- Logic for Authentication Changes ---
 watch(user, (newUser, oldUser) => {
-  // 当 user 从 null 变为有值时，说明登录成功
   if (newUser && !oldUser) {
-    console.log('User state changed to logged in, fetching products...');
-    isAuthModalOpen.value = false; // 确保模态框关闭
-    productsStore.fetchProducts();
+    // 登录成功，重置并加载第一页
+    isAuthModalOpen.value = false;
+    productsStore.resetAndFetchProducts();
   } else if (!newUser && oldUser) {
-    // 当 user 从有值变为 null 时，说明登出
-    console.log('User state changed to logged out, clearing products...');
+    // 登出，清空所有产品和分页状态
     productsStore.clearProducts();
   }
 });
 
-onMounted(() => {
-  // onMounted 逻辑保持不变，处理页面刷新后的情况
-  if (user.value) {
-    productsStore.fetchProducts();
-  }
-});
-
 function onLoggedIn() {
-  console.log('AuthModal emitted loggedIn event.');
-  if(user.value) {
-    productsStore.fetchProducts();
+  if (user.value) {
+    productsStore.resetAndFetchProducts();
   }
 }
 
+// --- Infinite Scroll Logic ---
+function setupIntersectionObserver() {
+  const options = { root: null, threshold: 0.5 };
+  observer = new IntersectionObserver((entries) => {
+    const entry = entries[0];
+    if (entry.isIntersecting && hasMore.value && !productsLoading.value && !loadingMore.value) {
+      productsStore.fetchProducts(); // 加载下一页
+    }
+  }, options);
+
+  // 确保 DOM 更新后再观察目标
+  nextTick(() => {
+    if (loadMoreTrigger.value) {
+      observer.observe(loadMoreTrigger.value);
+    }
+  });
+}
+
+// --- Lifecycle Hooks ---
+onMounted(() => {
+  // 页面加载时，如果用户已登录且列表为空，则加载数据
+  if (user.value && products.value.length === 0) {
+    productsStore.resetAndFetchProducts();
+  }
+  // 总是设置观察器
+  setupIntersectionObserver();
+});
+
+onUnmounted(() => {
+  // 组件销毁时，断开观察，防止内存泄漏
+  if (observer) {
+    observer.disconnect();
+  }
+});
+
+// --- Product Actions ---
 function handleAddProduct() {
   router.push({ name: 'product-new' });
 }
@@ -69,7 +104,6 @@ function handleDeleteProduct(product) {
   isConfirmModalOpen.value = true;
 }
 
-// ✨ FIX: The call to deleteProduct now only passes the product's ID.
 async function confirmDeletion() {
   if (productToDelete.value) {
     await productsStore.deleteProduct(productToDelete.value.id);
@@ -88,7 +122,6 @@ async function handleCopyLink(product) {
     toastStore.showToast({ msg: '复制失败，请检查浏览器权限', toastType: 'error' });
   }
 }
-
 </script>
 
 <template>
@@ -114,8 +147,8 @@ async function handleCopyLink(product) {
 
       <!-- Main Content Area -->
       <div v-else class="shop-content">
-        <!-- Loading State -->
-        <div v-if="productsLoading" class="loading-state">
+        <!-- 初始加载状态 (仅当列表为空时显示) -->
+        <div v-if="productsLoading && products.length === 0" class="loading-state">
           <div class="spinner"></div>
           <p>正在加载商品...</p>
         </div>
@@ -130,7 +163,7 @@ async function handleCopyLink(product) {
           <p class="error-details">错误信息: {{ error }}</p>
         </div>
 
-        <!-- Empty State -->
+        <!-- Empty State (只有在加载完成且列表为空时显示) -->
         <div v-else-if="!productsLoading && products.length === 0" class="empty-state">
           <div class="prompt-icon">
              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
@@ -139,19 +172,29 @@ async function handleCopyLink(product) {
           <p>看起来您还没有添加任何商品。点击右下角的 '+' 按钮开始创作吧！</p>
         </div>
 
-        <!-- Products Grid -->
-        <div v-else class="products-grid">
-          <ProductCard
-            v-for="product in products"
-            :key="product.id"
-            :product="product"
+        <!-- Products Grid Container -->
+        <div v-else class="products-grid-container">
+          <RecycleScroller
+            class="products-grid-virtual"
+            :items="products"
+            :item-size="420"
+            key-field="id"
+            v-slot="{ item }"
           >
-            <template #actions>
-              <button @click.stop.prevent="handleEditProduct(product)" class="action-btn">编辑</button>
-              <button @click.stop.prevent="handleCopyLink(product)" class="action-btn">复制链接</button>
-              <button @click.stop.prevent="handleDeleteProduct(product)" class="action-btn delete-btn">删除</button>
-            </template>
-          </ProductCard>
+            <ProductCard :product="item">
+              <template #actions>
+                <button @click.stop.prevent="handleEditProduct(item)" class="action-btn">编辑</button>
+                <button @click.stop.prevent="handleCopyLink(item)" class="action-btn">复制链接</button>
+                <button @click.stop.prevent="handleDeleteProduct(item)" class="action-btn delete-btn">删除</button>
+              </template>
+            </ProductCard>
+          </RecycleScroller>
+
+          <!-- 加载更多指示器和触发器 -->
+          <div v-if="hasMore" ref="loadMoreTrigger" class="load-more-indicator">
+            <div v-if="loadingMore" class="spinner-small"></div>
+            <p v-if="loadingMore">正在加载更多商品...</p>
+          </div>
         </div>
       </div>
     </div>
@@ -278,13 +321,41 @@ async function handleCopyLink(product) {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-// --- Products Grid Styles ---
-.products-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 2rem;
-  animation: fadeIn 0.8s ease-out 0.2s forwards;
-  opacity: 0;
+// --- New styles for virtual scroller and indicators ---
+.products-grid-container {
+  min-height: 70vh; // Give the container a minimum height to avoid layout shifts on load
+}
+
+.products-grid-virtual {
+  height: calc(100vh - 250px); // Virtual scroller requires a fixed height
+  overflow-y: auto;
+
+  // Style the inner wrapper of RecycleScroller to be a grid
+  :deep(.vue-recycle-scroller__item-wrapper) {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 2rem;
+    padding: 0.5rem; // Give some space for the scrollbar
+  }
+}
+
+.load-more-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  height: 80px;
+  color: var(--color-text-dark);
+
+  .spinner-small {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 1rem;
+  }
 }
 
 // --- Responsive Adjustments ---
@@ -294,9 +365,13 @@ async function handleCopyLink(product) {
   .shop-header p { font-size: 1.1rem; }
   .unauthenticated-prompt { padding: 2.5rem 1.5rem; }
   .unauthenticated-prompt h2, .empty-state h2, .error-state h2 { font-size: 1.8rem; }
-  .products-grid {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
+
+  // Responsive grid inside virtual scroller
+  .products-grid-virtual {
+    :deep(.vue-recycle-scroller__item-wrapper) {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
   }
 }
 </style>
