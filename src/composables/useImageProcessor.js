@@ -1,4 +1,5 @@
 // src/composables/useImageProcessor.js
+
 import { ref } from 'vue';
 import imageCompression from 'browser-image-compression';
 import { useToastStore } from '@/stores/toast';
@@ -20,39 +21,58 @@ export function useImageProcessor() {
       useWebWorker: true,
     };
 
-    try {
-      const processedImages = [];
-      for (const file of files) {
-        // 只处理图片文件
-        if (!file.type.startsWith('image/')) continue;
-
+    // ✨ 1. 使用 Promise.allSettled 来处理所有文件，即使其中一些失败
+    const compressionPromises = files
+      .filter(file => file.type.startsWith('image/')) // 仅处理图片文件
+      .map(async (file) => {
         const compressedFile = await imageCompression(file, options);
-
-        // 创建一个用于预览的本地 URL
         const previewUrl = URL.createObjectURL(compressedFile);
-
-        processedImages.push({
-          file: compressedFile, // 关联压缩后的 File 对象
+        return {
+          file: compressedFile,
           previewUrl: previewUrl,
-          id: `new_${Date.now()}_${Math.random()}` // 生成一个临时的唯一ID
-        });
+          id: `new_${Date.now()}_${Math.random()}`
+        };
+      });
+
+    const results = await Promise.allSettled(compressionPromises);
+
+    const processedImages = [];
+    let failedCount = 0;
+
+    results.forEach(result => {
+      if (result.status === 'fulfilled') {
+        processedImages.push(result.value);
+      } else {
+        failedCount++;
+        console.error('单个图片压缩失败:', result.reason);
       }
-      toastStore.showToast({ msg: '图片处理完成！' });
-      return processedImages;
-    } catch (err) {
-      console.error('Image processing failed:', err);
-      toastStore.showToast({ msg: '图片处理失败，请重试', toastType: 'error' });
-      return [];
-    } finally {
-      processing.value = false;
+    });
+
+    // ✨ 2. 提供更精确的用户反馈
+    let finalMessage = `处理完成！成功 ${processedImages.length} 张。`;
+    if (failedCount > 0) {
+      finalMessage += ` 失败 ${failedCount} 张。`;
     }
+    toastStore.showToast({
+      msg: finalMessage,
+      toastType: failedCount > 0 ? 'error' : 'success'
+    });
+
+    processing.value = false;
+    return processedImages;
   };
 
-  // 清理创建的本地URL，防止内存泄漏
+  /**
+   * 清理由 URL.createObjectURL 创建的本地URL，防止内存泄漏。
+   * @param {Array<object>} images - 来自组件状态的图片数组。
+   *   每个对象应包含一个 `image_url` 属性。
+   */
   const revokeImageUrls = (images) => {
       images.forEach(img => {
-          if (img.previewUrl && img.previewUrl.startsWith('blob:')) {
-              URL.revokeObjectURL(img.previewUrl);
+          // ✨ 3. FIX: 检查 `img.image_url` 而不是 `img.previewUrl`
+          // 因为组件将 previewUrl 赋值给了 image_url
+          if (img && img.image_url && img.image_url.startsWith('blob:')) {
+              URL.revokeObjectURL(img.image_url);
           }
       });
   };
