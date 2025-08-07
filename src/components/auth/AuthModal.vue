@@ -216,12 +216,6 @@ watch(formMode, () => {
 
 <template>
   <transition name="modal-fade">
-    <!--
-      @click.self="closeModal" 是实现“点击空白处关闭”的关键。
-      .self 修饰符确保只有当点击事件直接发生在 .modal-backdrop 元素上时，
-      closeModal 才会被触发，点击内部的 .modal-container 不会触发。
-      这部分代码已经是正确的。
-    -->
     <div v-if="active" class="modal-backdrop" :class="{ 'is-loading': status.loading }" @click.self="closeModal">
       <div :class="['modal-container', { 'is-shaking': isShaking }]" @click.stop>
         <header class="modal-header">

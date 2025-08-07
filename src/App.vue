@@ -32,7 +32,6 @@ onMounted(() => {
     // 任何情况下，都将最新的 session 信息同步到 Pinia store，保持状态一致
     authStore.setSession(session);
 
-    // ✨ 核心逻辑：专门处理密码恢复事件
     if (event === 'PASSWORD_RECOVERY') {
       console.log('检测到密码恢复事件，正在重定向到密码更新页面...');
       // 当用户通过邮件链接访问时，Supabase 会触发此事件。

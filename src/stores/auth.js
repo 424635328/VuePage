@@ -68,7 +68,6 @@ export const useAuthStore = defineStore('auth', () => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
 
-    // 关键：在函数返回前，立即同步更新状态
     session.value = data.session
     user.value = data.user
 
@@ -128,7 +127,7 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     session,
     loading,
-    checkUser, // ✨ 导出 checkUser
+    checkUser,
     signUp,
     verifyOtp,
     signInWithPassword,
@@ -136,6 +135,6 @@ export const useAuthStore = defineStore('auth', () => {
     signOut,
     sendPasswordResetEmail,
     resendConfirmationEmail,
-    setSession, // ✨ 导出 setSession
+    setSession,
   }
 })
