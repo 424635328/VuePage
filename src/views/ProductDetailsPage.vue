@@ -1,5 +1,3 @@
-<!-- src/views/ProductDetailsPage.vue -->
-
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
@@ -9,7 +7,6 @@ import { useAuthStore } from '@/stores/auth';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
 import ConfirmModal from '@/components/common/ConfirmModal.vue';
-// 不再需要直接导入 supabase
 
 const props = defineProps({
   public_id: {
@@ -57,6 +54,12 @@ const contentBlocks = computed(() => {
 const formattedDate = (d) => d ? new Date(d).toLocaleString('zh-CN', { dateStyle: 'long', timeStyle: 'short' }) : 'N/A';
 const lastUpdated = computed(() => product.value ? formattedDate(product.value.updated_at || product.value.created_at) : '');
 
+// ✨ 新增: 计算属性来判断是否有任何可显示的图片
+const hasDisplayableImage = computed(() => {
+    return images.value.length > 0 || (product.value && product.value.thumbnail_url);
+});
+
+
 // --- SEO & Meta Tags Management ---
 useHead(computed(() => {
   const p = product.value;
@@ -81,8 +84,16 @@ useHead(computed(() => {
 // --- Methods ---
 function applyProductData(data) {
   product.value = data;
-  images.value = data.images || [];
-  currentImage.value = images.value.length > 0 ? images.value[0].image_url : (data.thumbnail_url || '/placeholder.svg');
+  images.value = data.images ?? []; // 使用空值合并运算符确保 images 是一个数组
+
+  // 更加健壮的图片选择逻辑
+  if (images.value.length > 0) {
+    currentImage.value = images.value[0].image_url;
+  } else if (data.thumbnail_url) {
+    currentImage.value = data.thumbnail_url;
+  } else {
+    currentImage.value = '/placeholder.svg';
+  }
 }
 
 async function loadProductData() {
@@ -155,8 +166,6 @@ async function shareProduct() {
 
 // --- Lifecycle Hooks ---
 onMounted(loadProductData);
-
-// `onUnmounted` hook is no longer needed.
 </script>
 
 <template>
@@ -192,14 +201,16 @@ onMounted(loadProductData);
       </div>
 
       <div class="details-layout">
-        <aside v-if="images.length > 0" class="gallery-column fade-in-item">
+        <!-- ✨ FIX: Use the new computed property `hasDisplayableImage` -->
+        <aside v-if="hasDisplayableImage" class="gallery-column fade-in-item">
           <div class="main-image-wrapper">
-            <img :src="currentImage || '/placeholder.svg'"
+            <img :src="currentImage"
                  :key="currentImage"
                  :alt="product.name"
                  class="main-image"
                  @error.once="e => e.target.src = '/placeholder.svg'" />
           </div>
+          <!-- Only show thumbnails if there's more than one image in the gallery -->
           <div v-if="images.length > 1" class="thumbnail-grid">
             <img v-for="img in images" :key="img.id" :src="img.image_url"
                  :alt="`${product.name} thumbnail ${img.id}`"
