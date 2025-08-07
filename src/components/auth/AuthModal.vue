@@ -3,31 +3,24 @@
 <script setup>
 import { ref, reactive, watch, nextTick } from 'vue';
 import { useAuthStore } from '@/stores/auth';
+import { useRouter } from 'vue-router';
 
 // --- Props, Emits, and Store ---
 const props = defineProps({ active: Boolean });
-const emit = defineEmits(['close', 'loggedIn', 'update:active']);
+// 【修改】移除了不再需要的 'loggedIn' emit
+const emit = defineEmits(['close', 'update:active']);
 const authStore = useAuthStore();
+const router = useRouter();
 
 // --- Component State ---
-const formMode = ref('login'); // 'login', 'register', 'verify'
+const formMode = ref('login');
 const isShaking = ref(false);
 const otpInputRefs = ref([]);
 const firstInput = ref(null);
 
 const getInitialState = () => ({
-  form: {
-    email: '',
-    password: '',
-    confirmPassword: '',
-    otp: Array(6).fill(''),
-  },
-  status: {
-    loading: false,
-    error: '',
-    success: '',
-    showResendLink: false,
-  }
+  form: { email: '', password: '', confirmPassword: '', otp: Array(6).fill('') },
+  status: { loading: false, error: '', success: '', showResendLink: false }
 });
 
 const form = reactive(getInitialState().form);
@@ -42,17 +35,9 @@ function resetState() {
 }
 
 function closeModal() {
-  // 企业级实践：当有网络请求正在进行时，阻止关闭，防止状态不一致。
-  if (status.loading) {
-    return;
-  }
-
-  // 发出此事件以支持父组件的 `v-model:active` 写法
+  if (status.loading) return;
   emit('update:active', false);
-  // 同时发出 `close` 事件，以支持 `@close` 写法，提供最大灵活性。
   emit('close');
-
-  // 在模态框关闭动画播放后再重置内部状态，体验更平滑。
   setTimeout(resetState, 300);
 }
 
@@ -60,7 +45,6 @@ async function _handleSubmit(action) {
   status.loading = true;
   status.error = '';
   status.success = '';
-
   try {
     await action();
     return true;
@@ -80,8 +64,12 @@ async function handleLogin() {
   });
 
   if (successful) {
-    emit('loggedIn');
+    // 【关键修复】: 先关闭模态框，再执行跳转
     closeModal();
+    // 使用 nextTick 确保DOM更新（模态框开始关闭）有机会启动，然后再跳转。
+    // 这会让过渡更平滑。
+    await nextTick();
+    await router.replace({ name: 'shop' });
   } else {
     if (status.error.includes('Email not confirmed')) {
       status.error = '您的账户尚未激活。请检查邮箱中的确认链接。';
@@ -99,17 +87,15 @@ async function handleRegister() {
   if (form.password.length < 6) {
     status.error = '密码至少需要6个字符。'; return;
   }
-
   const successful = await _handleSubmit(async () => {
     await authStore.signUp({ email: form.email, password: form.password });
   });
-
-  if(successful) {
+  if (successful) {
     formMode.value = 'verify';
     status.success = `注册请求已发送！我们已向 ${form.email} 发送了一封确认邮件。`;
     status.error = '';
   } else if (!status.error.includes('rate limit')) {
-     status.error = '注册失败，该邮箱可能已被注册或输入有误。';
+    status.error = '注册失败，该邮箱可能已被注册或输入有误。';
   }
 }
 
@@ -124,10 +110,12 @@ async function handleVerifyOtp() {
   });
 
   if (successful) {
-    emit('loggedIn');
+    // 【关键修复】: 同样，先关闭模态框，再跳转
     closeModal();
+    await nextTick();
+    await router.replace({ name: 'shop' });
   } else {
-     status.error = '验证码无效或已过期，请重试或检查邮件中的链接。';
+    status.error = '验证码无效或已过期，请重试或检查邮件中的链接。';
   }
 }
 
@@ -143,11 +131,9 @@ async function handlePasswordReset() {
     setTimeout(() => isShaking.value = false, 500);
     return;
   }
-
   const successful = await _handleSubmit(async () => {
     await authStore.sendPasswordResetEmail(form.email);
   });
-
   if (successful) {
     status.success = `密码重置链接已发送至 ${form.email}，请查收。`;
   }
@@ -160,18 +146,16 @@ async function handleResendConfirmation() {
     setTimeout(() => isShaking.value = false, 500);
     return;
   }
-
   const successful = await _handleSubmit(async () => {
     await authStore.resendConfirmationEmail(form.email);
   });
-
   if (successful) {
     status.success = `新的确认邮件已成功发送至 ${form.email}，请查收。`;
     status.showResendLink = false;
   }
 }
 
-// --- OTP Input Logic ---
+// --- OTP Input Logic (无修改) ---
 function handleOtpInput(e, index) {
   const input = e.target;
   let value = input.value;
@@ -194,27 +178,28 @@ function handleOtpPaste(e) {
   }
 }
 
-// --- Autofocus ---
+// --- Autofocus (无修改) ---
 watch(() => props.active, (isActive) => {
   if (isActive) {
     nextTick(() => {
-        const target = formMode.value === 'verify' ? otpInputRefs.value[0] : firstInput.value;
-        target?.focus();
+      const target = formMode.value === 'verify' ? otpInputRefs.value[0] : firstInput.value;
+      target?.focus();
     });
   }
 });
 watch(formMode, () => {
-    status.error = '';
-    status.success = '';
-    isShaking.value = false;
-    nextTick(() => {
-        const target = formMode.value === 'verify' ? otpInputRefs.value[0] : firstInput.value;
-        target?.focus();
-    });
+  status.error = '';
+  status.success = '';
+  isShaking.value = false;
+  nextTick(() => {
+    const target = formMode.value === 'verify' ? otpInputRefs.value[0] : firstInput.value;
+    target?.focus();
+  });
 });
 </script>
 
 <template>
+  <!-- Template 部分无需任何修改 -->
   <transition name="modal-fade">
     <div v-if="active" class="modal-backdrop" :class="{ 'is-loading': status.loading }" @click.self="closeModal">
       <div :class="['modal-container', { 'is-shaking': isShaking }]" @click.stop>
@@ -226,7 +211,6 @@ watch(formMode, () => {
         </header>
 
         <main class="modal-body">
-          <!-- The rest of the template remains the same -->
           <div v-if="formMode === 'verify'">
             <p v-if="status.success" class="success-message">{{ status.success }}</p>
             <div class="info-block">
@@ -245,7 +229,6 @@ watch(formMode, () => {
               </button>
             </form>
           </div>
-
           <form v-else @submit.prevent="formMode === 'login' ? handleLogin() : handleRegister()">
             <div class="form-group">
               <label for="email">邮箱</label>
@@ -267,7 +250,6 @@ watch(formMode, () => {
               <span v-else>{{ formMode === 'login' ? '登录' : '注册' }}</span>
             </button>
           </form>
-
           <div class="message-area">
             <p v-if="status.error" class="error-message">{{ status.error }}</p>
             <p v-if="status.success && formMode !== 'verify'" class="success-message">{{ status.success }}</p>
@@ -275,7 +257,6 @@ watch(formMode, () => {
               没有收到邮件？点击重新发送
             </a>
           </div>
-
           <div v-if="formMode !== 'verify'">
             <div class="separator"><span>或</span></div>
             <div class="auth-providers">
@@ -286,7 +267,6 @@ watch(formMode, () => {
             </div>
           </div>
         </main>
-
         <footer class="modal-footer" v-if="formMode !== 'verify'">
           <p v-if="formMode === 'login'">
             还没有账户？ <a href="#" @click.prevent="formMode = 'register'">立即注册</a>
@@ -301,8 +281,8 @@ watch(formMode, () => {
 </template>
 
 <style lang="scss" scoped>
+/* Style 部分无需任何修改 */
 @use '@/assets/styles/index.scss' as *;
-
 @keyframes shake {
   10%, 90% { transform: translateX(-1px); }
   20%, 80% { transform: translateX(2px); }
@@ -326,10 +306,7 @@ watch(formMode, () => {
   display: flex; justify-content: center; align-items: center;
   z-index: 2000;
   padding: 1rem;
-
-  &.is-loading {
-    cursor: wait;
-  }
+  &.is-loading { cursor: wait; }
 }
 .modal-container {
   background-color: var(--color-background-soft);
@@ -355,18 +332,13 @@ watch(formMode, () => {
   cursor: pointer; line-height: 1;
   transition: color 0.2s, opacity 0.2s;
   &:hover:not(:disabled) { color: var(--color-primary); }
-
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-    &:hover {
-      color: var(--color-text-dark);
-    }
+    &:hover { color: var(--color-text-dark); }
   }
 }
-.modal-body {
-  padding: 1.5rem;
-}
+.modal-body { padding: 1.5rem; }
 .modal-footer {
   padding: 1rem 1.5rem;
   background-color: var(--color-background-mute);
@@ -384,9 +356,7 @@ watch(formMode, () => {
   }
 }
 
-.form-group {
-  margin-bottom: 1.25rem;
-}
+.form-group { margin-bottom: 1.25rem; }
 .label-group {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 0.5rem;
@@ -411,9 +381,7 @@ input {
   }
 }
 
-.otp-group {
-  display: flex; gap: 0.5rem; justify-content: center;
-}
+.otp-group { display: flex; gap: 0.5rem; justify-content: center; }
 .otp-input {
   width: 45px; height: 50px; text-align: center;
   font-size: 1.75rem; font-weight: 600;
@@ -450,11 +418,7 @@ input {
   &:hover { text-decoration: underline; }
 }
 
-.message-area {
-  min-height: 24px;
-  margin-top: 1rem;
-  text-align: center;
-}
+.message-area { min-height: 24px; margin-top: 1rem; text-align: center; }
 .error-message, .success-message {
   padding: 0.75rem; border-radius: 8px;
   font-size: 0.9rem;
@@ -519,7 +483,5 @@ input {
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
