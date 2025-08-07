@@ -2,6 +2,7 @@
 <script setup>
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useProductsStore } from '@/stores/products';
 
 const props = defineProps({
   product: {
@@ -10,11 +11,14 @@ const props = defineProps({
   },
 })
 
-// 详情页必须能够根据路由参数自给自足。
+const productsStore = useProductsStore();
+
+function prepareForNavigation() {
+  productsStore.selectProductForDetailPage(props.product);
+}
 
 const formattedDate = computed(() => {
   if (!props.product?.created_at) return '';
-  // 这个计算属性是高效的，可以保留
   return new Date(props.product.created_at).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'long',
@@ -28,12 +32,14 @@ const formattedDate = computed(() => {
     <router-link
       :to="{ name: 'product-details', params: { public_id: product.public_id } }"
       class="card-link"
+      @click="prepareForNavigation"
     >
       <div class="card-image-wrapper">
         <img
-          v-lazy-load="product.thumbnail_url || '/placeholder.svg'"
+          :src="product.thumbnail_url || '/placeholder.svg'"
           :alt="product.name"
           class="product-image"
+          loading="lazy"
           @error.once="e => e.target.src = '/placeholder.svg'"
         />
       </div>
@@ -46,7 +52,6 @@ const formattedDate = computed(() => {
 
     <div class="card-actions">
       <slot name="actions">
-        <!-- 默认插槽内容保持不变 -->
         <div class="card-actions-visual">
           <span>查看详情 &rarr;</span>
         </div>
@@ -55,7 +60,6 @@ const formattedDate = computed(() => {
   </div>
 </template>
 
-<!-- 样式部分保持完全不变 -->
 <style lang="scss" scoped>
 @use '@/assets/styles/index.scss' as *;
 

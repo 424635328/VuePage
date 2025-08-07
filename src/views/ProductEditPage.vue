@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router';
 import draggable from 'vuedraggable';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
-import { useImageProcessor } from '@/composables/useImageProcessor'; // ✨ 1. 引入 Composable
+import { useImageProcessor } from '@/composables/useImageProcessor'; // 引入 Composable
 
 const props = defineProps({
   public_id: { type: String, default: null },
@@ -20,7 +20,7 @@ const { processing: imagesProcessing, processFiles, revokeImageUrls } = useImage
 
 // --- Component State ---
 const form = ref({ name: '', description: '' });
-const images = ref([]); // Holds image objects for display and sorting: { id, image_url, file? }
+const images = ref([]);
 const loading = ref(true);
 const saving = ref(false);
 const error = ref(null);
@@ -33,7 +33,6 @@ const fileInput = ref(null);
 const isEditing = computed(() => !!props.public_id);
 const pageTitle = computed(() => isEditing.value ? '编辑商品' : '创建新商品');
 
-// ✨ 2. 复用 Edge Function，一次性加载产品和图片
 async function loadProductForEditing() {
   if (!isEditing.value) {
     loading.value = false;
@@ -49,8 +48,13 @@ async function loadProductForEditing() {
     }
     const data = await response.json();
     form.value = { name: data.name, description: data.description, id: data.id };
-    // 将从DB加载的图片映射到我们的内部格式
-    images.value = data.images.map(img => ({ id: img.id, image_url: img.image_url, file: null }));
+
+    images.value = (data.images ?? []).map(img => ({
+      id: img.id,
+      image_url: img.image_url,
+      file: null
+    }));
+
   } catch (e) {
     error.value = "无法加载商品数据。";
     toastStore.showToast({ msg: e.message, toastType: 'error' });
@@ -59,7 +63,6 @@ async function loadProductForEditing() {
   }
 }
 
-// --- Image Handling ---
 function triggerFileInput() {
   fileInput.value.click();
 }
@@ -70,14 +73,13 @@ async function handleFileSelection(files) {
       ...newImages.map(img => ({
         id: img.id,
         image_url: img.previewUrl,
-        file: img.file // ✨ 3. 直接关联 File 对象
+        file: img.file
       }))
     );
 }
 
 async function handleFileChange(event) {
   await handleFileSelection(event.target.files);
-  // 重置 input，以便可以再次选择相同的文件
   if (fileInput.value) fileInput.value.value = '';
 }
 
@@ -86,10 +88,8 @@ async function handleDrop(event) {
   await handleFileSelection(event.dataTransfer.files);
 }
 
-// ✨ 4. 简化的 removeImage 逻辑
 function removeImage(index) {
   const removedImage = images.value.splice(index, 1)[0];
-  // 如果是新上传的图片（有本地预览URL），则清理它
   if (removedImage.image_url.startsWith('blob:')) {
       URL.revokeObjectURL(removedImage.image_url);
   }
@@ -105,7 +105,6 @@ async function handleSubmit() {
   saving.value = true;
   try {
     let result;
-    // 筛选出真正需要上传的新文件和需要保留的旧图片
     const newImageFilesForUpload = images.value.filter(img => !!img.file).map(img => img.file);
     const existingImagesForUpdate = images.value.filter(img => !img.file);
 
@@ -120,7 +119,6 @@ async function handleSubmit() {
     }
   } catch (err) {
     console.error("Submit error:", err);
-    // toastStore 会在 store action 内部显示
   } finally {
     saving.value = false;
   }
@@ -130,7 +128,6 @@ async function handleSubmit() {
 onMounted(loadProductForEditing);
 
 onUnmounted(() => {
-    // 组件卸载时，清理所有创建的本地预览 URL
     revokeImageUrls(images.value);
 });
 
@@ -153,11 +150,11 @@ onUnmounted(() => {
       </header>
 
       <form @submit.prevent="handleSubmit" class="edit-form">
-        <!-- Name and Description fields (unchanged) -->
         <div class="form-group">
           <label for="name">商品名称 *</label>
           <input type="text" id="name" v-model.trim="form.name" required placeholder="例如：谷歌邮箱账号"/>
         </div>
+
         <div class="form-group">
           <label for="description">商品描述 (支持 Markdown ### 标题和 - 列表)</label>
           <textarea id="description" v-model="form.description" rows="12" placeholder="在这里详细描述您的商品..."></textarea>
@@ -178,7 +175,6 @@ onUnmounted(() => {
               </template>
             </draggable>
 
-            <!-- ✨ 5. 添加 dragover 状态 class -->
             <div
               class="upload-placeholder"
               :class="{ 'dragover': isDraggingOver }"
@@ -208,8 +204,8 @@ onUnmounted(() => {
 </template>
 
 <style lang="scss" scoped>
-/* All styles from the original file remain the same, with one addition for .dragover */
 @use '@/assets/styles/index.scss' as *;
+
 .edit-page {
   padding: 4rem 0;
   animation: fadeIn 0.5s ease-out;

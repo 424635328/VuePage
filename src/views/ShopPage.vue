@@ -1,5 +1,3 @@
-<!-- src/views/ShopPage.vue -->
-
 <script setup>
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
@@ -8,8 +6,8 @@ import { useAuthStore } from '@/stores/auth';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
 
-// 引入虚拟滚动库和其样式
-import { RecycleScroller } from 'vue-virtual-scroller';
+// 引入 DynamicScroller 和其样式
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller';
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 
 import ProductCard from '@/components/shop/ProductCard.vue';
@@ -22,7 +20,7 @@ const authStore = useAuthStore();
 const { user, loading: authLoading } = storeToRefs(authStore);
 
 const productsStore = useProductsStore();
-// 从 store 中获取分页相关的状态
+// 从分页优化的 store 获取状态
 const { products, loading: productsLoading, loadingMore, hasMore, error } = storeToRefs(productsStore);
 
 const toastStore = useToastStore();
@@ -33,18 +31,16 @@ const isAuthModalOpen = ref(false);
 const isConfirmModalOpen = ref(false);
 const productToDelete = ref(null);
 
-// 为 IntersectionObserver 创建 Ref 和实例变量
+// --- Infinite Scroll Logic ---
 const loadMoreTrigger = ref(null);
 let observer = null;
 
-// --- Logic for Authentication Changes ---
 watch(user, (newUser, oldUser) => {
   if (newUser && !oldUser) {
-    // 登录成功，重置并加载第一页
     isAuthModalOpen.value = false;
+    // 调用新的 store action
     productsStore.resetAndFetchProducts();
   } else if (!newUser && oldUser) {
-    // 登出，清空所有产品和分页状态
     productsStore.clearProducts();
   }
 });
@@ -55,17 +51,16 @@ function onLoggedIn() {
   }
 }
 
-// --- Infinite Scroll Logic ---
 function setupIntersectionObserver() {
   const options = { root: null, threshold: 0.5 };
   observer = new IntersectionObserver((entries) => {
     const entry = entries[0];
     if (entry.isIntersecting && hasMore.value && !productsLoading.value && !loadingMore.value) {
-      productsStore.fetchProducts(); // 加载下一页
+      // 加载更多
+      productsStore.fetchProducts();
     }
   }, options);
 
-  // 确保 DOM 更新后再观察目标
   nextTick(() => {
     if (loadMoreTrigger.value) {
       observer.observe(loadMoreTrigger.value);
@@ -75,16 +70,13 @@ function setupIntersectionObserver() {
 
 // --- Lifecycle Hooks ---
 onMounted(() => {
-  // 页面加载时，如果用户已登录且列表为空，则加载数据
   if (user.value && products.value.length === 0) {
     productsStore.resetAndFetchProducts();
   }
-  // 总是设置观察器
   setupIntersectionObserver();
 });
 
 onUnmounted(() => {
-  // 组件销毁时，断开观察，防止内存泄漏
   if (observer) {
     observer.disconnect();
   }
@@ -147,7 +139,7 @@ async function handleCopyLink(product) {
 
       <!-- Main Content Area -->
       <div v-else class="shop-content">
-        <!-- 初始加载状态 (仅当列表为空时显示) -->
+        <!-- Loading State -->
         <div v-if="productsLoading && products.length === 0" class="loading-state">
           <div class="spinner"></div>
           <p>正在加载商品...</p>
@@ -163,7 +155,7 @@ async function handleCopyLink(product) {
           <p class="error-details">错误信息: {{ error }}</p>
         </div>
 
-        <!-- Empty State (只有在加载完成且列表为空时显示) -->
+        <!-- Empty State -->
         <div v-else-if="!productsLoading && products.length === 0" class="empty-state">
           <div class="prompt-icon">
              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
@@ -172,25 +164,35 @@ async function handleCopyLink(product) {
           <p>看起来您还没有添加任何商品。点击右下角的 '+' 按钮开始创作吧！</p>
         </div>
 
-        <!-- Products Grid Container -->
-        <div v-else class="products-grid-container">
-          <RecycleScroller
-            class="products-grid-virtual"
+        <!-- The Final Grid Implementation -->
+        <div v-else>
+          <DynamicScroller
             :items="products"
-            :item-size="420"
-            key-field="id"
-            v-slot="{ item }"
+            :min-item-size="420"
+            class="products-scroller"
           >
-            <ProductCard :product="item">
-              <template #actions>
-                <button @click.stop.prevent="handleEditProduct(item)" class="action-btn">编辑</button>
-                <button @click.stop.prevent="handleCopyLink(item)" class="action-btn">复制链接</button>
-                <button @click.stop.prevent="handleDeleteProduct(item)" class="action-btn delete-btn">删除</button>
-              </template>
-            </ProductCard>
-          </RecycleScroller>
+            <template #before>
+              <div class="products-grid-skeleton"></div>
+            </template>
 
-          <!-- 加载更多指示器和触发器 -->
+            <template v-slot="{ item, index, active }">
+              <DynamicScrollerItem
+                :item="item"
+                :active="active"
+                :data-index="index"
+                class="product-card-container"
+              >
+                <ProductCard :product="item">
+                  <template #actions>
+                    <button @click.stop.prevent="handleEditProduct(item)" class="action-btn">编辑</button>
+                    <button @click.stop.prevent="handleCopyLink(item)" class="action-btn">复制链接</button>
+                    <button @click.stop.prevent="handleDeleteProduct(item)" class="action-btn delete-btn">删除</button>
+                  </template>
+                </ProductCard>
+              </DynamicScrollerItem>
+            </template>
+          </DynamicScroller>
+
           <div v-if="hasMore" ref="loadMoreTrigger" class="load-more-indicator">
             <div v-if="loadingMore" class="spinner-small"></div>
             <p v-if="loadingMore">正在加载更多商品...</p>
@@ -214,8 +216,8 @@ async function handleCopyLink(product) {
 </template>
 
 <style lang="scss" scoped>
-/* All styles remain the same and do not need to be changed. */
 @use '@/assets/styles/index.scss' as *;
+
 // --- Animation Keyframes ---
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(20px); }
@@ -321,22 +323,19 @@ async function handleCopyLink(product) {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-// --- New styles for virtual scroller and indicators ---
-.products-grid-container {
-  min-height: 70vh; // Give the container a minimum height to avoid layout shifts on load
+// --- Final Grid Scroller Styles ---
+.products-scroller {
+  position: relative;
 }
 
-.products-grid-virtual {
-  height: calc(100vh - 250px); // Virtual scroller requires a fixed height
-  overflow-y: auto;
+:deep(.products-grid-skeleton) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 2rem;
+}
 
-  // Style the inner wrapper of RecycleScroller to be a grid
-  :deep(.vue-recycle-scroller__item-wrapper) {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 2rem;
-    padding: 0.5rem; // Give some space for the scrollbar
-  }
+:deep(.product-card-container) {
+  width: 100%;
 }
 
 .load-more-indicator {
@@ -366,12 +365,9 @@ async function handleCopyLink(product) {
   .unauthenticated-prompt { padding: 2.5rem 1.5rem; }
   .unauthenticated-prompt h2, .empty-state h2, .error-state h2 { font-size: 1.8rem; }
 
-  // Responsive grid inside virtual scroller
-  .products-grid-virtual {
-    :deep(.vue-recycle-scroller__item-wrapper) {
-      grid-template-columns: 1fr;
-      gap: 1.5rem;
-    }
+  :deep(.products-grid-skeleton) {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 }
 </style>
