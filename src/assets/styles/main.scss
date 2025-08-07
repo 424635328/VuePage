@@ -2,7 +2,7 @@
 // 这会创建一个名为 "variables" 的命名空间。
 @use 'variables';
 
-/* CSS Reset and Base Styles (保持不变) */
+/* CSS Reset and Base Styles  */
 *,
 *::before,
 *::after {
@@ -38,7 +38,7 @@ body {
   padding-right: 2rem;
 }
 
-/* 链接默认样式 (保持不变) */
+/* 链接默认样式 */
 a {
   text-decoration: none;
   color: var(--color-primary);

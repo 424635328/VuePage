@@ -3,13 +3,13 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { Resend } from 'https://esm.sh/resend@2.0.0'
 
-// [代码健壮性修复] 1. 定义 CORS 头，允许来自任何源的请求
+// 1. 定义 CORS 头，允许来自任何源的请求
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// [最佳实践] 2. 从 Supabase 环境变量中安全地获取敏感信息
+// 2. 从 Supabase 环境变量中安全地获取敏感信息
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const TO_EMAIL = Deno.env.get('CONTACT_FORM_RECIPIENT_EMAIL') // 您的收件邮箱
 // [品牌化] 3. 将您的 LOGO URL 放在这里 (必须是公开可访问的链接)

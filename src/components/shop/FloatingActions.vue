@@ -58,7 +58,6 @@ onUnmounted(() => {
   position: fixed;
   bottom: 2rem;
   right: 2rem;
-  /* <-- 这是唯一的改动 */
   z-index: 1001;
   display: flex;
   flex-direction: column;

@@ -1,17 +1,19 @@
 <!-- src/components/auth/AuthModal.vue -->
+
 <script setup>
 import { ref, reactive, watch, nextTick } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 
 // --- Props, Emits, and Store ---
 const props = defineProps({ active: Boolean });
-const emit = defineEmits(['close', 'loggedIn']);
+const emit = defineEmits(['close', 'loggedIn', 'update:active']);
 const authStore = useAuthStore();
 
 // --- Component State ---
 const formMode = ref('login'); // 'login', 'register', 'verify'
 const isShaking = ref(false);
 const otpInputRefs = ref([]);
+const firstInput = ref(null);
 
 const getInitialState = () => ({
   form: {
@@ -32,6 +34,7 @@ const form = reactive(getInitialState().form);
 const status = reactive(getInitialState().status);
 
 // --- Core Logic & Handlers ---
+
 function resetState() {
   Object.assign(form, getInitialState().form);
   Object.assign(status, getInitialState().status);
@@ -39,55 +42,55 @@ function resetState() {
 }
 
 function closeModal() {
+  // 企业级实践：当有网络请求正在进行时，阻止关闭，防止状态不一致。
+  if (status.loading) {
+    return;
+  }
+
+  // 发出此事件以支持父组件的 `v-model:active` 写法
+  emit('update:active', false);
+  // 同时发出 `close` 事件，以支持 `@close` 写法，提供最大灵活性。
   emit('close');
+
+  // 在模态框关闭动画播放后再重置内部状态，体验更平滑。
   setTimeout(resetState, 300);
 }
 
-//  修改 _handleSubmit，使其返回布尔值表示成功或失败
 async function _handleSubmit(action) {
   status.loading = true;
   status.error = '';
   status.success = '';
-  status.showResendLink = false;
-  await nextTick();
 
   try {
     await action();
-    return true; // 成功时返回 true
+    return true;
   } catch (error) {
     status.error = error.message || '发生未知错误。';
     isShaking.value = true;
     setTimeout(() => isShaking.value = false, 500);
-    return false; // 失败时返回 false
+    return false;
   } finally {
-    // 这个 finally 块现在总是在 UI 清理（如 closeModal）之前执行
     status.loading = false;
   }
 }
 
-// 重构 handleLogin 以解决竞态条件
 async function handleLogin() {
-  // 1. 调用包装器执行核心登录请求，并等待其结果
-  const loginSuccessful = await _handleSubmit(async () => {
+  const successful = await _handleSubmit(async () => {
     await authStore.signInWithPassword({ email: form.email, password: form.password });
   });
 
-  // 2. 如果登录成功，才执行关闭模态框等UI操作
-  if (loginSuccessful) {
+  if (successful) {
     emit('loggedIn');
     closeModal();
   } else {
-    // 3. 如果登录失败，处理特定的错误信息
     if (status.error.includes('Email not confirmed')) {
-      status.error = '您的账户尚未激活，请检查邮箱。';
+      status.error = '您的账户尚未激活。请检查邮箱中的确认链接。';
       status.showResendLink = true;
     } else {
-      // 提供一个更通用的失败提示
-      status.error = '登录失败，请检查您的邮箱和密码。';
+      status.error = '登录失败，请检查您的邮箱和密码是否正确。';
     }
   }
 }
-
 
 async function handleRegister() {
   if (form.password !== form.confirmPassword) {
@@ -97,15 +100,16 @@ async function handleRegister() {
     status.error = '密码至少需要6个字符。'; return;
   }
 
-  const registerSuccessful = await _handleSubmit(async () => {
+  const successful = await _handleSubmit(async () => {
     await authStore.signUp({ email: form.email, password: form.password });
   });
 
-  if(registerSuccessful) {
+  if(successful) {
     formMode.value = 'verify';
-    status.success = `注册成功！我们已向 ${form.email} 发送了一封确认邮件。`;
+    status.success = `注册请求已发送！我们已向 ${form.email} 发送了一封确认邮件。`;
+    status.error = '';
   } else if (!status.error.includes('rate limit')) {
-     status.error = '注册失败，该邮箱可能已被使用。';
+     status.error = '注册失败，该邮箱可能已被注册或输入有误。';
   }
 }
 
@@ -115,43 +119,56 @@ async function handleVerifyOtp() {
     status.error = '请输入一个有效的6位数验证码。'; return;
   }
 
-  const verifySuccessful = await _handleSubmit(async () => {
+  const successful = await _handleSubmit(async () => {
     await authStore.verifyOtp(form.email, otpCode);
   });
 
-  if (verifySuccessful) {
+  if (successful) {
     emit('loggedIn');
     closeModal();
   } else {
-     status.error = '验证码无效或已过期，请重试。';
+     status.error = '验证码无效或已过期，请重试或检查邮件中的链接。';
   }
 }
 
 async function handleGithubLogin() {
-  // GitHub登录涉及页面跳转，其逻辑保持不变
-  await authStore.signInWithGithub();
   closeModal();
+  await authStore.signInWithGithub();
 }
 
 async function handlePasswordReset() {
   if (!form.email) {
-    status.error = '请输入您的邮箱地址以重置密码。'; return;
+    status.error = '请输入您的邮箱地址以重置密码。';
+    isShaking.value = true;
+    setTimeout(() => isShaking.value = false, 500);
+    return;
   }
-  await _handleSubmit(async () => {
+
+  const successful = await _handleSubmit(async () => {
     await authStore.sendPasswordResetEmail(form.email);
-    status.success = `密码重置链接已发送至 ${form.email}，请查收。`;
   });
+
+  if (successful) {
+    status.success = `密码重置链接已发送至 ${form.email}，请查收。`;
+  }
 }
 
 async function handleResendConfirmation() {
   if (!form.email) {
-    status.error = '请输入您的邮箱地址以重新发送邮件。'; return;
+    status.error = '请输入您的邮箱地址以重新发送邮件。';
+    isShaking.value = true;
+    setTimeout(() => isShaking.value = false, 500);
+    return;
   }
-  await _handleSubmit(async () => {
+
+  const successful = await _handleSubmit(async () => {
     await authStore.resendConfirmationEmail(form.email);
+  });
+
+  if (successful) {
     status.success = `新的确认邮件已成功发送至 ${form.email}，请查收。`;
     status.showResendLink = false;
-  });
+  }
 }
 
 // --- OTP Input Logic ---
@@ -178,7 +195,6 @@ function handleOtpPaste(e) {
 }
 
 // --- Autofocus ---
-const firstInput = ref(null);
 watch(() => props.active, (isActive) => {
   if (isActive) {
     nextTick(() => {
@@ -200,28 +216,29 @@ watch(formMode, () => {
 
 <template>
   <transition name="modal-fade">
-    <div v-if="active" class="modal-backdrop" @click.self="closeModal">
+    <!--
+      @click.self="closeModal" 是实现“点击空白处关闭”的关键。
+      .self 修饰符确保只有当点击事件直接发生在 .modal-backdrop 元素上时，
+      closeModal 才会被触发，点击内部的 .modal-container 不会触发。
+      这部分代码已经是正确的。
+    -->
+    <div v-if="active" class="modal-backdrop" :class="{ 'is-loading': status.loading }" @click.self="closeModal">
       <div :class="['modal-container', { 'is-shaking': isShaking }]" @click.stop>
         <header class="modal-header">
           <h2 class="modal-title" v-if="formMode === 'login'">登录</h2>
           <h2 class="modal-title" v-else-if="formMode === 'register'">创建账户</h2>
           <h2 class="modal-title" v-else>最后一步，激活您的账户</h2>
-          <button @click="closeModal" class="close-btn" aria-label="关闭">&times;</button>
+          <button @click="closeModal" class="close-btn" aria-label="关闭" :disabled="status.loading">&times;</button>
         </header>
 
         <main class="modal-body">
+          <!-- The rest of the template remains the same -->
           <div v-if="formMode === 'verify'">
             <p v-if="status.success" class="success-message">{{ status.success }}</p>
-
             <div class="info-block">
-              <p class="info-text-main">
-                请点击邮件中的 **确认链接** 来完成注册。
-              </p>
-              <p class="info-text-secondary">
-                或者，为了方便，您也可以在下方输入邮件中的6位验证码。
-              </p>
+              <p class="info-text-main">请点击邮件中的 **确认链接** 来完成注册。</p>
+              <p class="info-text-secondary">或者，为了方便，您也可以在下方输入邮件中的6位验证码。</p>
             </div>
-
             <form @submit.prevent="handleVerifyOtp">
               <div class="form-group otp-group" @paste="handleOtpPaste">
                 <template v-for="i in 6" :key="i">
@@ -315,6 +332,10 @@ watch(formMode, () => {
   display: flex; justify-content: center; align-items: center;
   z-index: 2000;
   padding: 1rem;
+
+  &.is-loading {
+    cursor: wait;
+  }
 }
 .modal-container {
   background-color: var(--color-background-soft);
@@ -338,8 +359,16 @@ watch(formMode, () => {
   background: none; border: none; font-size: 2rem;
   color: var(--color-text-dark);
   cursor: pointer; line-height: 1;
-  transition: color 0.2s;
-  &:hover { color: var(--color-primary); }
+  transition: color 0.2s, opacity 0.2s;
+  &:hover:not(:disabled) { color: var(--color-primary); }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    &:hover {
+      color: var(--color-text-dark);
+    }
+  }
 }
 .modal-body {
   padding: 1.5rem;

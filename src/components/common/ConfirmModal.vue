@@ -21,7 +21,6 @@ defineProps({
   },
 });
 
-// ✨ FIX: Kept 'emit' and created explicit handlers to use it, satisfying ESLint.
 const emit = defineEmits(['close', 'confirm']);
 
 function handleClose() {
@@ -35,7 +34,6 @@ function handleConfirm() {
 
 <template>
   <transition name="modal-fade">
-    <!-- ✨ UPDATED: The @click.self now calls the new handler function -->
     <div v-if="show" class="modal-backdrop" @click.self="handleClose">
       <div class="modal-container">
         <div class="modal-icon">
@@ -44,7 +42,6 @@ function handleConfirm() {
         <h3 class="modal-title">{{ title }}</h3>
         <p class="modal-message">{{ message }}</p>
         <div class="modal-actions">
-          <!-- ✨ UPDATED: Buttons now call the new handler functions -->
           <button @click="handleClose" class="btn btn-secondary">{{ cancelText }}</button>
           <button @click="handleConfirm" class="btn btn-danger">{{ confirmText }}</button>
         </div>
@@ -54,7 +51,6 @@ function handleConfirm() {
 </template>
 
 <style lang="scss" scoped>
-/* All styles remain the same. The change is purely in the script logic. */
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.3s ease; }
 .modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 .modal-backdrop {

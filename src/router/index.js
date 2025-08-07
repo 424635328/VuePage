@@ -65,6 +65,15 @@ const router = createRouter({
       name: 'contact',
       component: () => import('../views/ContactPage.vue'),
     },
+    {
+      path: '/about',
+      name: 'about',
+      component: () => import('../views/AboutPage.vue'),
+    },
+    {
+      path: '/:catchAll(.*)*',
+      redirect: { name: 'home' },
+    },
   ],
 })
 
@@ -105,7 +114,7 @@ router.beforeEach(async (to, from, next) => {
     toastStore.showToast({ msg: '该页面需要登录后才能访问', toastType: 'info' });
 
     // 将用户重定向到主页。在主页上，用户可以通过导航栏打开登录模态框。
-    next({ name: 'home' });
+    next({ name: 'shop' });
 
   } else if (to.name === 'update-password' && !isAuthenticated) {
     // B. 特殊情况：允许未登录用户访问密码重置页面
