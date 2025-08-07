@@ -11,7 +11,7 @@
       <section ref="heroSectionRef" class="hero-section fade-in-section">
         <h1 class="hero-title">构建未来，用代码驱动创新</h1>
         <p class="hero-subtitle">我们是 MHStudio，专注于提供高性能、高颜值的数字化解决方案，助力您的业务腾飞。</p>
-        <router-link to="/projects" class="cta-button">探索我们的产品</router-link>
+        <router-link to="/shop" class="cta-button">探索我们的产品</router-link>
       </section>
 
       <section ref="featuresSectionRef" class="features-section fade-in-section">

@@ -20,7 +20,6 @@ const bootStage = ref('booting');
 const bootLog = ref([]);
 const progress = ref(0);
 const finalMessage = ref('');
-// 移除 showEngage, curtainText 等多步交互状态
 
 const { x, y } = useMouse({ type: 'client', when: () => props.active && !isDismissed.value });
 const mouseX = ref(0);
@@ -172,11 +171,10 @@ onUnmounted(clearAllTimers);
             </div>
             <div><span class="glitch" data-text="VUE_SHOP_OS">LAUNCHING!!!</span></div>
             <button class="btn btn-hazard" data-text="CLICK TO LAUNCH">CLICK TO CONTINUE</button>
-            <div><p class="status-text"> {{ finalMessage }}</p></div>
+            <div class="glow" data-text="VUE_SHOP_OS">{{ finalMessage }}</div>
         </div>
         <div class="hud-element bottom-bar">
           <div class="progress-bar"><div class="progress-bar-inner" :style="{ width: `${progress}%` }"></div></div>
-          <p class="final-message">{{ finalMessage }}<span v-if="finalMessage" class="caret"></span></p>
         </div>
       </div>
     </div>
