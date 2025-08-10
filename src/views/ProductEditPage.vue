@@ -2,55 +2,67 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import imageCompression from 'browser-image-compression';
 import draggable from 'vuedraggable';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
 import { supabase } from '@/lib/supabaseClient';
 
-const props = defineProps({
-  public_id: { type: String, default: null },
-});
-
+const route = useRoute();
 const router = useRouter();
 const productsStore = useProductsStore();
 const toastStore = useToastStore();
 
-const form = ref({ name: '', description: '' });
-const images = ref([]); // Holds image objects for display and sorting: { id, image_url }
-const newImageFiles = ref([]); // Holds new File objects for upload
+const form = ref({ id: null, name: '', description: '' });
+const images = ref([]);
 const loading = ref(true);
 const saving = ref(false);
 const error = ref(null);
+const isDragOver = ref(false);
 
-const isEditing = computed(() => !!props.public_id);
+const productId = computed(() => route.params.id);
+const isEditing = computed(() => !!productId.value);
 const pageTitle = computed(() => isEditing.value ? '编辑商品' : '创建新商品');
 
 const fileInput = ref(null);
 
-async function loadProductForEditing() {
-  if (!isEditing.value) {
-    loading.value = false;
-    return;
+onMounted(async () => {
+  if (isEditing.value) {
+    if (productsStore.selectedProduct && productsStore.selectedProduct.id == productId.value) {
+      console.log('Loading product from store...');
+      form.value = { ...productsStore.selectedProduct };
+      await fetchProductImages(form.value.id);
+    } else {
+      console.log('Product not in store, fetching from API...');
+      await loadProductFromAPI(productId.value);
+    }
   }
+  loading.value = false;
+});
 
+async function loadProductFromAPI(id) {
   try {
-    const { data: productData, error: productError } = await supabase
-      .from('products').select('*').eq('public_id', props.public_id).single();
+    const { data, error: productError } = await supabase
+      .from('products').select('*').eq('id', id).single();
     if (productError) throw productError;
-    form.value = productData;
-
-    const { data: imageData, error: imageError } = await supabase
-      .from('product_images').select('id, image_url').eq('product_id', productData.id).order('position');
-    if (imageError) throw imageError;
-    images.value = imageData;
-
+    form.value = data;
+    await fetchProductImages(data.id);
   } catch (e) {
     error.value = "无法加载商品数据。";
     toastStore.showToast({ msg: e.message, toastType: 'error' });
-  } finally {
-    loading.value = false;
+  }
+}
+
+async function fetchProductImages(id) {
+  try {
+    const { data, error: imageError } = await supabase
+      .from('product_images').select('id, image_url').eq('product_id', id).order('position');
+    if (imageError) throw imageError;
+    images.value = data || [];
+  } catch (e) {
+    error.value = "无法加载商品图片。";
+    toastStore.showToast({ msg: `加载图片失败: ${e.message}`, toastType: 'error' });
   }
 }
 
@@ -59,57 +71,45 @@ function triggerFileInput() {
 }
 
 async function processFiles(files) {
-  if (files.length === 0) return;
+  if (!files || files.length === 0) return;
 
-  const options = {
-    maxSizeMB: 1,
-    maxWidthOrHeight: 1920,
-    useWebWorker: true,
-  };
-
-  toastStore.showToast({ msg: `正在压缩 ${files.length} 张图片...`, toastType: 'success' });
+  const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true };
+  toastStore.showToast({ msg: `正在处理 ${files.length} 张图片...`, toastType: 'info' });
 
   try {
-    const compressionPromises = files.map(file => imageCompression(file, options));
+    const compressionPromises = Array.from(files).map(file => imageCompression(file, options));
     const compressedFiles = await Promise.all(compressionPromises);
 
     compressedFiles.forEach(file => {
       const reader = new FileReader();
       reader.onload = (e) => {
-        images.value.push({ id: `new-${Date.now()}-${Math.random()}`, image_url: e.target.result });
-        newImageFiles.value.push(file);
+        images.value.push({
+          id: `new-${Date.now()}-${Math.random()}`,
+          image_url: e.target.result,
+          _file: file,
+        });
       };
       reader.readAsDataURL(file);
     });
   } catch (err) {
-    console.error('Image compression failed:', err);
-    toastStore.showToast({ msg: '图片压缩失败', toastType: 'error' });
+    console.error('Image processing failed:', err);
+    toastStore.showToast({ msg: '图片处理失败', toastType: 'error' });
   } finally {
      if(fileInput.value) fileInput.value.value = '';
   }
 }
 
 async function handleFileChange(event) {
-  const files = Array.from(event.target.files);
-  await processFiles(files);
+  await processFiles(event.target.files);
 }
 
-// 新增：处理拖拽释放事件
 async function handleDrop(event) {
-  const files = Array.from(event.dataTransfer.files);
-  await processFiles(files);
+  isDragOver.value = false;
+  await processFiles(event.dataTransfer.files);
 }
-
 
 function removeImage(index) {
-  const removedImage = images.value.splice(index, 1)[0];
-  // If it's a newly added file (transient ID is a string), remove it from the upload queue.
-  if (typeof removedImage.id === 'string' && removedImage.id.startsWith('new-')) {
-    const imageIndex = newImageFiles.value.findIndex(file => file.name === removedImage.file_name_for_removal);
-    if (imageIndex > -1) {
-      newImageFiles.value.splice(imageIndex, 1);
-    }
-  }
+  images.value.splice(index, 1);
 }
 
 async function handleSubmit() {
@@ -120,16 +120,28 @@ async function handleSubmit() {
 
   saving.value = true;
   try {
+    const newImageFilesToUpload = images.value
+      .filter(img => img._file)
+      .map(img => img._file);
+
+    const existingImagesForUpdate = images.value
+      .filter(img => typeof img.id === 'number');
+
     let result;
     if (isEditing.value) {
-      const existingImagesForUpdate = images.value.filter(img => typeof img.id === 'number');
-      result = await productsStore.updateProduct(form.value.id, form.value, newImageFiles.value, existingImagesForUpdate);
+      result = await productsStore.updateProduct(
+        form.value.id,
+        form.value,
+        newImageFilesToUpload,
+        existingImagesForUpdate
+      );
     } else {
-      result = await productsStore.addProduct(form.value, newImageFiles.value);
+      result = await productsStore.addProduct(form.value, newImageFilesToUpload);
     }
 
     if (result) {
-      router.push({ name: 'product-details', params: { public_id: result.public_id } });
+      toastStore.showToast({ msg: `商品 "${result.name}" 已保存!` });
+      router.push({ name: 'shop' });
     }
   } catch (err) {
     console.error("Submit error:", err);
@@ -137,8 +149,6 @@ async function handleSubmit() {
     saving.value = false;
   }
 }
-
-onMounted(loadProductForEditing);
 </script>
 
 <template>
@@ -148,7 +158,7 @@ onMounted(loadProductForEditing);
     </div>
     <div v-else-if="error" class="error-state">
       <h2>{{ error }}</h2>
-      <router-link to="/shop" class="cta-button">返回商店</router-link>
+      <router-link to="/shop" class="btn btn-primary">返回商店</router-link>
     </div>
 
     <div v-else class="container">
@@ -164,7 +174,7 @@ onMounted(loadProductForEditing);
         </div>
 
         <div class="form-group">
-          <label for="description">商品描述 (支持 Markdown ### 标题和 - 列表)</label>
+          <label for="description">商品描述 (支持 Markdown)</label>
           <textarea id="description" v-model="form.description" rows="12" placeholder="在这里详细描述您的商品..."></textarea>
         </div>
 
@@ -176,19 +186,20 @@ onMounted(loadProductForEditing);
             <draggable v-model="images" item-key="id" class="image-gallery-grid" ghost-class="ghost">
               <template #item="{ element, index }">
                 <div class="gallery-item">
-                  <img :src="element.image_url" class="gallery-image" />
+                  <img :src="element.image_url" :alt="form.name" class="gallery-image" />
                   <button type="button" @click.prevent="removeImage(index)" class="delete-image-btn" title="删除图片">&times;</button>
                   <div v-if="index === 0" class="thumbnail-badge">封面</div>
                 </div>
               </template>
             </draggable>
 
-            <!-- 修改：添加拖拽事件监听器 -->
             <div
               class="upload-placeholder"
+              :class="{ 'dragover': isDragOver }"
               @click="triggerFileInput"
               @dragover.prevent
-              @dragleave.prevent
+              @dragenter.prevent="isDragOver = true"
+              @dragleave.prevent="isDragOver = false"
               @drop.prevent="handleDrop"
               role="button"
               aria-label="添加图片或拖拽图片到此区域"
@@ -200,9 +211,9 @@ onMounted(loadProductForEditing);
         </div>
 
         <div class="form-actions">
-           <button type="button" @click="router.push('/shop')" class="btn btn-secondary">取消</button>
-           <button type="submit" class="btn btn-primary" :disabled="saving">
-             <span v-if="saving" class="spinner"></span>
+           <button type="button" @click="router.push({ name: 'shop' })" class="btn btn-secondary">取消</button>
+           <button type="submit" class="btn btn-primary" :disabled="saving || loading">
+             <span v-if="saving" class="spinner-small"></span>
              <span v-else>保存商品</span>
            </button>
         </div>
@@ -212,8 +223,10 @@ onMounted(loadProductForEditing);
 </template>
 
 <style lang="scss" scoped>
+/* All existing styles are correct */
 @use '@/assets/styles/index.scss' as *;
 
+/* ... (previous styles, no changes needed) ... */
 .edit-page {
   padding: 4rem 0;
   animation: fadeIn 0.5s ease-out;
@@ -266,7 +279,7 @@ onMounted(loadProductForEditing);
   input[type="text"], textarea {
     width: 100%;
     padding: 0.8rem 1rem;
-    background-color: #2a2a2a;
+    background-color: var(--color-background-input);
     border: 1px solid var(--color-border);
     border-radius: 8px;
     color: var(--color-text);
@@ -292,7 +305,7 @@ onMounted(loadProductForEditing);
   gap: 1rem;
 }
 .image-gallery-grid {
-  display: contents; // Makes the draggable component part of the parent grid
+  display: contents; 
 }
 .gallery-item {
   position: relative;
@@ -327,6 +340,8 @@ onMounted(loadProductForEditing);
     align-items: center;
     justify-content: center;
     transition: background-color 0.2s;
+    line-height: 1;
+    padding: 0;
     &:hover { background-color: #ef4444; }
   }
 
@@ -359,14 +374,14 @@ onMounted(loadProductForEditing);
   align-items: center;
   color: var(--color-text-dark);
   cursor: pointer;
-  transition: border-color 0.2s, color 0.2s, background-color 0.2s; // 添加背景色过渡
+  transition: border-color 0.2s, color 0.2s, background-color 0.2s;
 
   span {
     font-size: 0.9rem;
     margin-top: 0.5rem;
   }
 
-  &:hover, &.dragover { // 添加拖拽悬浮时的样式
+  &:hover, &.dragover {
     border-color: var(--color-primary);
     color: var(--color-primary);
     background-color: rgba(var(--color-primary-rgb), 0.1);
@@ -386,28 +401,32 @@ onMounted(loadProductForEditing);
   border: none;
   font-weight: 600;
   cursor: pointer;
-  display: flex;
+  transition: all 0.2s;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   &.btn-primary {
     background-color: var(--color-primary);
     color: #1a1a1a;
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(var(--color-primary-rgb), 0.2);
+    }
   }
   &.btn-secondary {
-    background-color: #3a3a3a;
+    background-color: var(--color-background-mute);
     color: var(--color-text);
-  }
-   &.btn-danger {
-    background-color: #ef4444;
-    color: #ffffff;
-    &:hover { background-color: #dc2626; }
+     &:hover:not(:disabled) {
+      background-color: var(--color-border-hover);
+    }
   }
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 }
-.spinner {
+.spinner, .spinner-small {
   width: 1.2em;
   height: 1.2em;
   border: 2px solid currentColor;
@@ -415,7 +434,17 @@ onMounted(loadProductForEditing);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+.loading-state {
+  .spinner {
+    width: 50px;
+    height: 50px;
+    border-width: 4px;
+    margin-bottom: 1.5rem;
+  }
+}
+.error-state {
+  h2 { margin-bottom: 1.5rem; }
+}
 
 .loading-state, .error-state {
   display: flex;
@@ -429,4 +458,5 @@ onMounted(loadProductForEditing);
   from { opacity: 0; }
   to { opacity: 1; }
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
