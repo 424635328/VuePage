@@ -114,6 +114,7 @@ onUnmounted(() => {
           <li><RouterLink to="/">首页</RouterLink></li>
           <li><RouterLink to="/shop">商店</RouterLink></li>
           <li><RouterLink to="/projects">产品</RouterLink></li>
+          <li><RouterLink to="/editor">编辑器</RouterLink></li>
         </ul>
       </nav>
 
@@ -150,6 +151,8 @@ onUnmounted(() => {
           <li><RouterLink to="/projects">产品</RouterLink></li>
           <li><RouterLink to="/about">关于我们</RouterLink></li>
           <li><RouterLink to="/contact">联系我们</RouterLink></li>
+          <li><RouterLink to="/editor">编辑器</RouterLink></li>
+
 
           <!-- **改动 4: 同步移动端菜单的逻辑** -->
           <li class="mobile-cta-item">

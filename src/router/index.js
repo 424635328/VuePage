@@ -74,6 +74,12 @@ const router = createRouter({
       path: '/:catchAll(.*)*',
       redirect: { name: 'home' },
     },
+    {
+      path: '/editor',
+      name: 'editor',
+      component: () => import('../views/ImageEditorPage.vue'),
+      meta: { requiresAuth: true }, // 需要认证
+    }
   ],
 })
 
