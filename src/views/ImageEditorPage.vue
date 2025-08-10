@@ -56,14 +56,27 @@ const loadImageFromFile = (file) => {
   };
   reader.readAsDataURL(file);
 };
+
 const handleKeyDown = (event) => {
+  const target = event.target;
+  // 核心修复：如果事件的目标是输入框或文本区域，则不处理全局快捷键
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+    return;
+  }
+
   if (event.ctrlKey || event.metaKey) {
     if (event.key === 'z') { event.preventDefault(); store.undo(); }
     if (event.key === 'y') { event.preventDefault(); store.redo(); }
   }
   if (event.code === 'Space' && !event.repeat) { event.preventDefault(); canvasAreaRef.value?.startPanning(); }
 };
-const handleKeyUp = (event) => { if (event.code === 'Space') canvasAreaRef.value?.stopPanning(); };
+const handleKeyUp = (event) => {
+  const target = event.target;
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+    return;
+  }
+  if (event.code === 'Space') canvasAreaRef.value?.stopPanning();
+};
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown);
@@ -112,7 +125,6 @@ onUnmounted(() => {
 .editor-main-content {
   flex-grow: 1;
   display: grid;
-  /* ✨ 核心修改: 增加右侧面板宽度 */
   grid-template-columns: 52px 1fr 280px;
   background-color: transparent;
   min-height: 0;
