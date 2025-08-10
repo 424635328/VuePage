@@ -1,14 +1,10 @@
-<!-- src/components/editor/panels/HistoryPanel.vue -->
-
 <template>
-  <div class="panel">
-    <h3 class="panel-title">历史记录</h3>
+  <div class="history-panel-container">
     <div class="panel-content">
       <ul class="history-list">
-        <li v-for="(step, index) in store.history" :key="step.id"
-            :class="{ active: index === store.historyIndex }"
-            @click="goToHistory(index)"
-            :title="step.name">
+        <li v-for="(step) in reversedHistory" :key="step.id"
+            :class="{ active: store.historyIndex === step.originalIndex }"
+            @click="goToHistory(step.originalIndex)">
           {{ step.name }}
         </li>
       </ul>
@@ -17,9 +13,15 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { useImageEditorStore } from '../../../stores/imageEditor';
 
 const store = useImageEditorStore();
+
+// 创建一个反向的、且包含原始索引的历史记录数组，便于渲染和点击
+const reversedHistory = computed(() =>
+    [...store.history].map((step, index) => ({ ...step, originalIndex: index })).reverse()
+);
 
 const goToHistory = (index) => {
   if (store.historyIndex > index) {
@@ -31,38 +33,55 @@ const goToHistory = (index) => {
 </script>
 
 <style scoped>
-/* 在 <style scoped> 内部 */
-.panel {
-    background-color: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    overflow: hidden;
-    flex-grow: 1;
+.history-panel-container {
+    height: 100%;
     display: flex;
     flex-direction: column;
 }
-.panel-title {
-    font-size: var(--font-size-normal);
-    font-weight: 600;
-    padding: 8px var(--panel-padding);
-    background-color: rgba(255, 255, 255, 0.05);
-    margin: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+.panel-content {
+    padding: 10px;
+    flex-grow: 1;
+    overflow-y: auto;
 }
-.panel-content { padding: 0; flex-grow: 1; overflow-y: auto; }
-.history-list { list-style: none; margin: 0; padding: 0; }
+.panel-content::-webkit-scrollbar {
+    width: 8px;
+}
+.panel-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+.panel-content::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+.panel-content::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+.history-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
 .history-list li {
   padding: 8px 12px;
   font-size: var(--font-size-small);
   cursor: pointer;
-  border-bottom: 1px solid var(--bg-color-deeper);
   color: var(--text-color-secondary);
   transition: background-color 0.15s ease, color 0.15s ease;
-  /* ✨ 增加文本溢出处理 */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  border-radius: 4px;
+  margin-bottom: 2px;
 }
-.history-list li:hover { background-color: var(--bg-color-light); }
-.history-list li.active { background-color: var(--accent-color); color: white; }
+.history-list li:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+.history-list li.active {
+    background-color: var(--accent-color);
+    color: white;
+    font-weight: 500;
+}
 </style>

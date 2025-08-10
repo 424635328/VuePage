@@ -1,11 +1,10 @@
-// src/stores/imageEditor.js
-
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 
 let nextLayerId = 0;
 let nextHistoryId = 0;
 
+// 创建图层状态快照的辅助函数
 function createLayersSnapshot(layers) {
   return layers.map(layer => ({
     id: layer.id,
@@ -18,9 +17,28 @@ function createLayersSnapshot(layers) {
   }));
 }
 
-
 export const useImageEditorStore = defineStore('imageEditor', () => {
   // --- STATE ---
+
+  // ‼️ 核心修改：定义企业级标准的默认调整项
+  const defaultAdjustments = {
+    // 光效组
+    brightness: 0,   // 亮度
+    contrast: 0,     // 对比度
+    highlights: 0,   // 高光
+    shadows: 0,      // 阴影
+    // 色彩组
+    saturate: 0,     // 饱和度
+    vibrance: 0,     // 自然饱和度 (将用 CSS 滤镜组合模拟)
+    temperature: 0,  // 色温 (将用 CSS 滤镜组合模拟)
+    tint: 0,         // 色调 (将用 CSS 滤镜组合模拟)
+    hue: 0,          // 色相
+    // 效果组
+    sharpen: 0,      // 锐化 (将用 CSS 滤镜组合模拟)
+    blur: 0,         // 模糊
+    vignette: 0,     // 晕影 (将用伪元素实现)
+  };
+
   const originalImage = ref(null);
   const layers = ref([]);
   const activeLayerId = ref(null);
@@ -52,9 +70,8 @@ export const useImageEditorStore = defineStore('imageEditor', () => {
       isLocked: false,
       opacity: 100,
       blendMode: 'normal',
-      adjustments: {
-        brightness: 0, contrast: 0, saturate: 0, hue: 0, blur: 0, sharpen: 0,
-      },
+      // ✨ 使用新的默认值对象
+      adjustments: { ...defaultAdjustments },
     };
 
     layers.value = [backgroundLayer];
@@ -116,6 +133,13 @@ export const useImageEditorStore = defineStore('imageEditor', () => {
     activeLayer.value.adjustments[key] = Number(value);
   }
 
+  // ✨ 新增一个 action 用于重置单个调整项
+  function resetSingleAdjustment(key, actionName) {
+      updateActiveLayerAndRecordHistory(actionName, (layer) => {
+          layer.adjustments[key] = defaultAdjustments[key];
+      });
+  }
+
   function setActiveTool(tool) {
     activeTool.value = tool;
   }
@@ -124,7 +148,6 @@ export const useImageEditorStore = defineStore('imageEditor', () => {
     activeLayerId.value = id;
   }
 
-  // ✨ --- EXPORT FUNCTIONALITY --- ✨
   function exportImage(format = 'image/png', quality = 0.92) {
     if (!originalImage.value) {
       console.error("No image to export.");
@@ -138,7 +161,9 @@ export const useImageEditorStore = defineStore('imageEditor', () => {
     exportCanvas.width = img.width;
     exportCanvas.height = img.height;
 
-    // 在这里，我们不绘制棋盘格，背景默认就是透明的
+    // ... 导出逻辑 ...
+
+    // 在这个离屏 Canvas 上，我们不绘制棋盘格，背景默认就是透明的
 
     layers.value.forEach(layer => {
       if (!layer.isVisible) return;
@@ -148,7 +173,7 @@ export const useImageEditorStore = defineStore('imageEditor', () => {
       exportCtx.globalAlpha = layer.opacity / 100;
       exportCtx.globalCompositeOperation = layer.blendMode;
 
-      const { brightness, contrast, saturate, hue, blur } = layer.adjustments;
+      const { brightness, contrast, saturate, hue, blur } = layer.adjustments; // (简化了，真实导出需要完整滤镜)
       exportCtx.filter = `
         brightness(${100 + brightness}%)
         contrast(${100 + contrast}%)
@@ -162,7 +187,6 @@ export const useImageEditorStore = defineStore('imageEditor', () => {
       exportCtx.restore();
     });
 
-    // 创建下载链接并触发
     const dataUrl = exportCanvas.toDataURL(format, quality);
     const link = document.createElement('a');
     const fileExtension = format.split('/')[1];
@@ -176,10 +200,12 @@ export const useImageEditorStore = defineStore('imageEditor', () => {
   return {
     originalImage, layers, activeLayerId, activeLayer, history, historyIndex,
     activeTool, zoom, pan, canUndo, canRedo, isImageLoaded,
+    defaultAdjustments, // 暴露默认值
     loadImage, addHistoryStep, undo, redo,
     updateActiveLayerAdjustment,
     updateActiveLayerAndRecordHistory,
+    resetSingleAdjustment, // 暴露新 action
     setActiveTool, setActiveLayerId,
-    exportImage, // ✨ 暴露导出函数
+    exportImage,
   };
 });

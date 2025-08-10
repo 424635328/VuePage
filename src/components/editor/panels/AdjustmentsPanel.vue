@@ -1,38 +1,42 @@
-<!-- src/components/editor/panels/AdjustmentsPanel.vue -->
-
 <template>
-  <div class="panel" v-if="store.activeLayer">
-    <h3 class="panel-title">调整</h3>
-    <div class="panel-content">
-      <div v-for="adj in adjustments" :key="adj.key" class="adjustment-item">
-        <label :for="adj.key">{{ adj.label }}</label>
-        <div class="slider-group">
-          <input
-            type="range"
-            :id="adj.key"
-            :min="adj.min"
-            :max="adj.max"
-            :step="adj.step || 1"
-            :value="store.activeLayer.adjustments[adj.key]"
-            @input="handleInput(adj.key, $event.target.value)"
-            @change="handleChange(adj.label, adj.key, $event.target.value)"
-            :disabled="store.activeLayer.isLocked"
-          />
-          <input
-            type="number"
-            class="slider-value"
-            :value="store.activeLayer.adjustments[adj.key]"
-            @change="handleNumberChange(adj.label, adj.key, $event.target.value)"
-            :disabled="store.activeLayer.isLocked"
-          >
+  <div class="adjustments-panel" v-if="store.activeLayer">
+    <div v-for="group in adjustmentGroups" :key="group.title" class="adjustment-group-container">
+        <h3 class="panel-title">{{ group.title }}</h3>
+        <div class="panel-content">
+            <div v-for="adj in group.items" :key="adj.key" class="adjustment-item">
+                <div class="label-group">
+                    <label :for="adj.key">{{ adj.label }}</label>
+                    <button
+                        class="reset-single-btn"
+                        @click="resetSingle(adj.key, `重置${adj.label}`)"
+                        v-if="store.activeLayer.adjustments[adj.key] !== store.defaultAdjustments[adj.key]"
+                        title="重置"
+                    >
+                        ⟲
+                    </button>
+                </div>
+                <div class="slider-group">
+                <input
+                    type="range"
+                    :id="adj.key"
+                    :min="adj.min"
+                    :max="adj.max"
+                    :step="adj.step || 1"
+                    :value="store.activeLayer.adjustments[adj.key]"
+                    @input="handleInput(adj.key, $event.target.value)"
+                    @change="handleChange(adj.label, adj.key, $event.target.value)"
+                    :disabled="store.activeLayer.isLocked"
+                />
+                <input
+                    type="number"
+                    class="slider-value"
+                    :value="store.activeLayer.adjustments[adj.key]"
+                    @change="handleNumberChange(adj.label, adj.key, $event.target.value)"
+                    :disabled="store.activeLayer.isLocked"
+                >
+                </div>
+            </div>
         </div>
-      </div>
-      <button
-        class="reset-btn"
-        @click="resetAdjustments"
-        :disabled="store.activeLayer.isLocked">
-        重置调整
-      </button>
     </div>
   </div>
 </template>
@@ -41,62 +45,106 @@
 import { useImageEditorStore } from '../../../stores/imageEditor';
 const store = useImageEditorStore();
 
-const adjustments = [
-  { key: 'brightness', label: '亮度', min: -100, max: 100 },
-  { key: 'contrast', label: '对比度', min: -100, max: 100 },
-  { key: 'saturate', label: '饱和度', min: -100, max: 100 },
-  { key: 'hue', label: '色相', min: -180, max: 180 },
-  { key: 'blur', label: '模糊', min: 0, max: 50 },
+const adjustmentGroups = [
+    {
+        title: '光效',
+        items: [
+            { key: 'brightness', label: '亮度', min: -100, max: 100 },
+            { key: 'contrast', label: '对比度', min: -100, max: 100 },
+            { key: 'highlights', label: '高光', min: -100, max: 100 },
+            { key: 'shadows', label: '阴影', min: -100, max: 100 },
+        ]
+    },
+    {
+        title: '色彩',
+        items: [
+            { key: 'saturate', label: '饱和度', min: -100, max: 100 },
+            { key: 'vibrance', label: '自然饱和度', min: -100, max: 100 },
+            { key: 'temperature', label: '色温', min: -100, max: 100 },
+            { key: 'tint', label: '色调', min: -100, max: 100 },
+            { key: 'hue', label: '色相', min: -180, max: 180 },
+        ]
+    },
+    {
+        title: '效果',
+        items: [
+            { key: 'sharpen', label: '锐化', min: 0, max: 100 },
+            { key: 'blur', label: '模糊', min: 0, max: 50 },
+            { key: 'vignette', label: '晕影', min: -100, max: 100 },
+        ]
+    }
 ];
 
-// 实时更新视觉，不记录历史
 const handleInput = (key, value) => {
   store.updateActiveLayerAdjustment(key, value);
 };
 
-// ‼️ 修复点: 确保最终值被提交并记录到历史
-// 当滑块拖动结束时触发
 const handleChange = (label, key, value) => {
   store.updateActiveLayerAndRecordHistory(`调整${label}`, (layer) => {
     layer.adjustments[key] = Number(value);
   });
 };
 
-// ‼️ 修复点: 当直接输入数字时触发
 const handleNumberChange = (label, key, value) => {
-  // 直接调用 handleChange 来统一逻辑
   handleChange(label, key, value);
-}
+};
 
-const resetAdjustments = () => {
-    store.updateActiveLayerAndRecordHistory('重置调整', layer => {
-        Object.assign(layer.adjustments, {
-            brightness: 0, contrast: 0, saturate: 0, hue: 0, blur: 0,
-        });
-    });
-}
+const resetSingle = (key, actionName) => {
+    store.resetSingleAdjustment(key, actionName);
+};
 </script>
 
 <style scoped>
-.panel {
-    background-color: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    overflow: hidden;
+.adjustments-panel {
+    padding: 10px;
+}
+.adjustment-group-container:not(:last-child) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 10px;
+    margin-bottom: 10px;
 }
 .panel-title {
     font-size: var(--font-size-normal);
     font-weight: 600;
-    padding: 8px var(--panel-padding);
-    background-color: rgba(255, 255, 255, 0.05);
-    margin: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 0 0 15px 0;
+    color: var(--text-color-primary);
 }
-.panel-content { padding: var(--panel-padding); }
+.panel-content {
+    padding: 0;
+}
+.adjustment-item {
+    margin-bottom: 14px;
+}
+.label-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+.label-group label {
+    font-size: var(--font-size-small);
+    color: var(--text-color-secondary);
+}
+.reset-single-btn {
+    background: none;
+    border: none;
+    color: var(--text-color-secondary);
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.15s ease, transform 0.2s ease;
+}
+.reset-single-btn:hover {
+    color: var(--text-color-primary);
+    transform: rotate(-90deg);
+}
 
-.adjustment-item { margin-bottom: 12px; }
-.adjustment-item label { display: block; font-size: var(--font-size-small); margin-bottom: 6px; color: var(--text-color-secondary); }
-.slider-group { display: flex; align-items: center; gap: 10px; }
+.slider-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
 
 input[type="range"] {
   flex-grow: 1;
@@ -132,7 +180,9 @@ input[type="range"]:disabled::-moz-range-thumb {
     background: var(--text-color-disabled);
     cursor: not-allowed;
 }
-input[type="range"]:disabled { cursor: not-allowed; }
+input[type="range"]:disabled {
+    cursor: not-allowed;
+}
 
 .slider-value {
   width: 45px;
@@ -152,25 +202,5 @@ input[type="range"]:disabled { cursor: not-allowed; }
     background-color: var(--bg-color-deep);
     color: var(--text-color-disabled);
     cursor: not-allowed;
-}
-
-.reset-btn {
-  width: 100%;
-  padding: 8px;
-  background-color: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-color-primary);
-  border-radius: 4px;
-  cursor: pointer;
-  margin-top: 10px;
-  transition: background-color 0.15s ease;
-}
-.reset-btn:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.15);
-}
-.reset-btn:disabled {
-  background-color: transparent;
-  color: var(--text-color-disabled);
-  cursor: not-allowed;
 }
 </style>

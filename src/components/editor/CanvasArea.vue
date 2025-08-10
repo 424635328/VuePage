@@ -1,8 +1,13 @@
-<!-- src/components/editor/CanvasArea.vue -->
-
 <template>
-  <div class="canvas-area" ref="containerRef" :class="cursorClass">
-    <canvas ref="canvasRef"></canvas>
+  <div class="canvas-area" ref="containerRef" :class="cursorClass" @wheel.prevent="handleWheel">
+    <!-- ✨ transform 和 filter 都应用在这个 wrapper 上 -->
+    <div class="canvas-wrapper" :style="wrapperStyle">
+        <div class="canvas-content" :style="contentStyle">
+            <canvas ref="canvasRef"></canvas>
+            <!-- 晕影效果的覆盖层 -->
+            <div class="vignette-overlay" :style="vignetteStyle"></div>
+        </div>
+    </div>
     <div v-if="!store.isImageLoaded" class="placeholder">
       <p>点击 "文件" -> "打开" 或拖拽图片到此区域</p>
     </div>
@@ -23,98 +28,93 @@ let lastMousePos = { x: 0, y: 0 };
 
 const cursorClass = computed(() => {
   if (isPanning.value) return 'is-grabbing';
+  // ✨ 当 activeTool 是 'select' 时，允许拖动
+  if (store.activeTool === 'select') return 'is-grab';
   switch (store.activeTool) {
-    case 'select': return 'is-grab';
-    case 'brush': return 'is-crosshair';
-    case 'crop': return 'is-crosshair';
-    case 'text': return 'is-text';
-    default: return '';
+    case 'brush':
+    case 'crop':
+      return 'is-crosshair';
+    case 'text':
+      return 'is-text';
+    default:
+      return '';
   }
 });
 
-/**
- * 绘制棋盘格背景
- * @param {CanvasRenderingContext2D} ctx - 画布上下文
- * @param {number} width - 画布宽度
- * @param {number} height - 画布高度
- */
-function drawCheckerboard(ctx, width, height) {
-  const size = 16; // 每个格子的尺寸
-  const color1 = '#424242'; // 深灰色
-  const color2 = '#3a3a3a'; // 更深的灰色
+const vignetteStyle = computed(() => {
+    if (!store.activeLayer) return {};
+    const amount = store.activeLayer.adjustments.vignette;
+    if (amount === 0) return {};
+    const intensity = Math.abs(amount) / 100;
+    const color = amount > 0 ? '255, 255, 255' : '0, 0, 0';
+    return {
+        'box-shadow': `inset 0 0 ${intensity * 150}px ${intensity * 80}px rgba(${color}, ${intensity * 0.7})`
+    };
+});
 
-  for (let y = 0; y < height; y += size) {
-    for (let x = 0; x < width; x += size) {
-      ctx.fillStyle = ((x / size) + (y / size)) % 2 === 0 ? color1 : color2;
-      ctx.fillRect(x, y, size, size);
-    }
-  }
-}
+// ✨ 将变换逻辑移到 CSS 样式中
+const wrapperStyle = computed(() => {
+    return {
+        transform: `translate(${store.pan.x}px, ${store.pan.y}px) scale(${store.zoom})`
+    };
+});
+
+const contentStyle = computed(() => {
+    if (!store.activeLayer) return { filter: 'none' };
+    const {
+        brightness, contrast, saturate, hue, blur,
+        temperature, highlights, shadows, sharpen, vibrance
+    } = store.activeLayer.adjustments;
+
+    const tempFilter = temperature > 0 ? `sepia(${temperature / 100})` : '';
+    const blueOverlay = temperature < 0 ? `brightness(${1 + temperature/500})` : '';
+    const shadowLift = shadows > 0 ? `drop-shadow(0 0 ${shadows/5}px rgba(200,200,255, ${shadows/300}))` : '';
+    const highlightCompress = highlights < 0 ? `drop-shadow(0 0 ${Math.abs(highlights)/2}px rgba(0,0,0, ${Math.abs(highlights)/200}))` : '';
+    const sharpenFilter = sharpen > 0 ? `contrast(${1 + sharpen / 200}) brightness(${1 - sharpen / 500})` : '';
+    const vibranceFilter = vibrance > 0 ? `saturate(${100 + saturate + vibrance}%) contrast(${100 - vibrance/4}%)` : `saturate(${100 + saturate + vibrance}%)`;
+
+    return {
+        filter: `
+            brightness(${100 + brightness}%)
+            contrast(${100 + contrast}%)
+            ${vibranceFilter}
+            hue-rotate(${hue}deg)
+            blur(${blur}px)
+            ${tempFilter}
+            ${blueOverlay}
+            ${shadowLift}
+            ${highlightCompress}
+            ${sharpenFilter}
+        `.trim().replace(/\s+/g, ' ')
+    };
+});
 
 const renderCanvas = () => {
-  if (!ctx) return;
+  if (!ctx || !store.isImageLoaded) {
+    if(ctx) {
+        const canvas = canvasRef.value;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    return;
+  };
 
   const canvas = canvasRef.value;
-  const { width, height } = canvas.getBoundingClientRect();
-
-  // 适配高DPI屏幕
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = width * dpr;
-  canvas.height = height * dpr;
-  ctx.scale(dpr, dpr);
-
-  // 首先绘制棋盘格作为整个画布的背景
-  drawCheckerboard(ctx, width, height);
-
-  if (!store.isImageLoaded) {
-    return; // 如果没有图片，只显示棋盘格背景
-  }
-
-  // 保存当前状态，以便应用全局平移和缩放
-  ctx.save();
-  ctx.translate(store.pan.x, store.pan.y);
-  ctx.scale(store.zoom, store.zoom);
-
   const img = store.originalImage;
-  // 计算图片（画板）在缩放和平移后的中心位置
-  const imgWrapperX = (width / store.zoom - img.width) / 2;
-  const imgWrapperY = (height / store.zoom - img.height) / 2;
+  const dpr = window.devicePixelRatio || 1;
 
-  // 在图片下方绘制一个纯色背景，模拟画板边界，这样棋盘格只在画板外围显示
-  ctx.fillStyle = 'var(--bg-color-deepest)';
-  ctx.fillRect(imgWrapperX, imgWrapperY, img.width, img.height);
+  // ✨ 画布尺寸固定为图片原始尺寸，缩放由 CSS 完成
+  canvas.width = img.width * dpr;
+  canvas.height = img.height * dpr;
+  canvas.style.width = `${img.width}px`;
+  canvas.style.height = `${img.height}px`;
 
-  // 遍历并绘制所有可见图层
-  store.layers.forEach(layer => {
-    if (!layer.isVisible) return;
-
-    ctx.save();
-
-    ctx.globalAlpha = layer.opacity / 100;
-    ctx.globalCompositeOperation = layer.blendMode;
-
-    const { brightness, contrast, saturate, hue, blur } = layer.adjustments;
-    ctx.filter = `
-      brightness(${100 + brightness}%)
-      contrast(${100 + contrast}%)
-      saturate(${100 + saturate}%)
-      hue-rotate(${hue}deg)
-      blur(${blur}px)
-    `;
-
-    // 将图片绘制在计算好的画板位置上
-    ctx.drawImage(img, imgWrapperX, imgWrapperY);
-
-    ctx.restore();
-  });
-
-  // 恢复全局变换
-  ctx.restore();
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, img.width, img.height);
+  ctx.drawImage(img, 0, 0);
 };
 
 const handleWheel = (event) => {
   if (!store.isImageLoaded) return;
-  event.preventDefault();
   const delta = -Math.sign(event.deltaY);
   const zoomFactor = 1.1;
   const newZoom = delta > 0 ? store.zoom * zoomFactor : store.zoom / zoomFactor;
@@ -122,7 +122,8 @@ const handleWheel = (event) => {
 };
 
 const handleMouseDown = (event) => {
-  if (isPanning.value) {
+  // ✨ 只在移动工具激活时或按住空格键时允许拖动
+  if (store.activeTool === 'select' || isPanning.value) {
     lastMousePos = { x: event.clientX, y: event.clientY };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -130,8 +131,9 @@ const handleMouseDown = (event) => {
 };
 
 const handleMouseMove = (event) => {
-  const dx = event.clientX - lastMousePos.x;
-  const dy = event.clientY - lastMousePos.y;
+  // ✨ 拖动距离需要除以缩放比例，以获得正确的移动速度
+  const dx = (event.clientX - lastMousePos.x);
+  const dy = (event.clientY - lastMousePos.y);
   store.pan.x += dx;
   store.pan.y += dy;
   lastMousePos = { x: event.clientX, y: event.clientY };
@@ -146,71 +148,104 @@ const startPanning = () => {
   if (!store.isImageLoaded) return;
   isPanning.value = true;
 };
-
 const stopPanning = () => {
   isPanning.value = false;
   window.removeEventListener('mousemove', handleMouseMove);
   window.removeEventListener('mouseup', handleMouseUp);
 };
 
-const observer = new ResizeObserver(renderCanvas);
+const observer = new ResizeObserver(() => {
+    // 窗口尺寸变化时，可能需要重新居中
+    if (store.isImageLoaded) {
+        // You might want to recenter the image here if needed
+    }
+});
 
 onMounted(() => {
   ctx = canvasRef.value.getContext('2d');
-  containerRef.value.addEventListener('wheel', handleWheel, { passive: false });
   containerRef.value.addEventListener('mousedown', handleMouseDown);
   observer.observe(containerRef.value);
-  // 初始渲染
   renderCanvas();
 });
 
 onUnmounted(() => {
-  containerRef.value?.removeEventListener('wheel', handleWheel);
   containerRef.value?.removeEventListener('mousedown', handleMouseDown);
   observer.disconnect();
 });
 
 watch(
-  () => [store.layers, store.zoom, store.pan],
-  () => {
-    requestAnimationFrame(renderCanvas);
-  },
-  { deep: true }
+  () => store.isImageLoaded,
+  (isLoaded) => {
+    if (isLoaded) {
+      nextTick(() => {
+        renderCanvas();
+        // 自动居中和缩放
+        const container = containerRef.value;
+        const img = store.originalImage;
+        const scaleX = container.clientWidth / (img.width + 80); // add padding
+        const scaleY = container.clientHeight / (img.height + 80);
+        store.zoom = Math.min(scaleX, scaleY, 1);
+        store.pan.x = 0;
+        store.pan.y = 0;
+      });
+    } else {
+        renderCanvas();
+    }
+  }
 );
 
-watch(() => store.isImageLoaded, (isLoaded) => {
-  if (isLoaded) {
-    const container = containerRef.value;
-    const img = store.originalImage;
-    const scaleX = container.clientWidth / img.width;
-    const scaleY = container.clientHeight / img.height;
-    store.zoom = Math.min(scaleX, scaleY, 1) * 0.9;
-    store.pan = { x: 0, y: 0 };
-  }
-  nextTick(renderCanvas);
-});
 
 defineExpose({ startPanning, stopPanning });
 </script>
 
 <style scoped>
 .canvas-area {
-  background-color: var(--bg-color-deepest);
+  background-color: transparent;
   position: relative;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .canvas-area.is-grab { cursor: grab; }
 .canvas-area.is-grabbing { cursor: grabbing; }
 .canvas-area.is-crosshair { cursor: crosshair; }
 .canvas-area.is-text { cursor: text; }
 
-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+.canvas-wrapper {
+    position: absolute;
+    transition: transform 0.1s linear;
+    /* 这个 wrapper 用于平移和缩放 */
 }
+
+.canvas-content {
+    /* 这个 content 用于滤镜 */
+    transition: filter 0.1s ease-out;
+    background-image:
+        linear-gradient(45deg, #424242 25%, transparent 25%),
+        linear-gradient(-45deg, #424242 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #424242 75%),
+        linear-gradient(-45deg, transparent 75%, #424242 75%);
+    background-size: 32px 32px;
+    background-position: 0 0, 0 16px, 16px -16px, -16px 0px;
+    background-color: var(--bg-color-deepest);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+canvas {
+  display: block; /* 移除 canvas 下方的空隙 */
+}
+
+.vignette-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    transition: box-shadow 0.15s ease-in-out;
+}
+
 .placeholder {
   display: flex;
   align-items: center;

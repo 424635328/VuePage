@@ -1,5 +1,3 @@
-<!-- src/views/ImageEditorPage.vue -->
-
 <template>
   <div class="image-editor-page"
     @dragover.prevent="handleDragOver"
@@ -37,73 +35,40 @@ const fileInputRef = ref(null);
 const canvasAreaRef = ref(null);
 const isDragging = ref(false);
 
-const triggerFileInput = () => {
-  fileInputRef.value?.click();
-};
-
+const triggerFileInput = () => { fileInputRef.value?.click(); };
 const handleFileSelect = (event) => {
   const file = event.target.files?.[0];
-  if (file) {
-    loadImageFromFile(file);
-  }
+  if (file) loadImageFromFile(file);
 };
-
-const handleDragOver = () => {
-  isDragging.value = true;
-};
-
-const handleDragLeave = () => {
-  isDragging.value = false;
-};
-
+const handleDragOver = () => { isDragging.value = true; };
+const handleDragLeave = () => { isDragging.value = false; };
 const handleDrop = (event) => {
   isDragging.value = false;
   const file = event.dataTransfer.files?.[0];
-  if (file && file.type.startsWith('image/')) {
-    loadImageFromFile(file);
-  }
+  if (file && file.type.startsWith('image/')) loadImageFromFile(file);
 };
-
 const loadImageFromFile = (file) => {
   const reader = new FileReader();
   reader.onload = (e) => {
     const img = new Image();
-    img.onload = () => {
-      store.loadImage(img);
-    };
+    img.onload = () => { store.loadImage(img); };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 };
-
 const handleKeyDown = (event) => {
   if (event.ctrlKey || event.metaKey) {
-    if (event.key === 'z') {
-      event.preventDefault();
-      store.undo();
-    }
-    if (event.key === 'y') {
-      event.preventDefault();
-      store.redo();
-    }
+    if (event.key === 'z') { event.preventDefault(); store.undo(); }
+    if (event.key === 'y') { event.preventDefault(); store.redo(); }
   }
-  if (event.code === 'Space' && !event.repeat) {
-    event.preventDefault();
-    canvasAreaRef.value?.startPanning();
-  }
+  if (event.code === 'Space' && !event.repeat) { event.preventDefault(); canvasAreaRef.value?.startPanning(); }
 };
-
-const handleKeyUp = (event) => {
-  if (event.code === 'Space') {
-    canvasAreaRef.value?.stopPanning();
-  }
-};
+const handleKeyUp = (event) => { if (event.code === 'Space') canvasAreaRef.value?.stopPanning(); };
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown);
   window.addEventListener('keyup', handleKeyUp);
 });
-
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown);
   window.removeEventListener('keyup', handleKeyUp);
@@ -118,31 +83,21 @@ onUnmounted(() => {
   --bg-color-normal: #333333;
   --bg-color-light: #3c3c3c;
   --bg-color-lightest: #4a4a4a;
-
   --border-color: #454545;
   --border-color-light: #5a5a5a;
-
   --text-color-primary: #cccccc;
   --text-color-secondary: #999999;
   --text-color-disabled: #666666;
-
   --accent-color: #007acc;
   --accent-color-hover: #0095ff;
-
   --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-size-small: 0.8rem;
   --font-size-normal: 0.9rem;
-
   --panel-padding: 12px;
   --control-height: 28px;
 }
-
-.image-editor-page, .image-editor-page * {
-  box-sizing: border-box;
-}
-
+.image-editor-page, .image-editor-page * { box-sizing: border-box; }
 .image-editor-page {
-  /* ‼️ 核心修改点: 移除背景色，使其透明 */
   background-color: transparent;
   color: var(--text-color-primary);
   display: flex;
@@ -154,40 +109,25 @@ onUnmounted(() => {
   overflow: hidden;
   user-select: none;
 }
-
 .editor-main-content {
   flex-grow: 1;
   display: grid;
-  grid-template-columns: 52px 1fr 260px;
-  gap: 1px;
-  /* ‼️ 核心修改点: 移除网格间隙的背景色 */
+  /* ✨ 核心修改: 增加右侧面板宽度 */
+  grid-template-columns: 52px 1fr 280px;
   background-color: transparent;
   min-height: 0;
   min-width: 0;
 }
-
 .drag-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background-color: rgba(0, 122, 255, 0.2);
   border: 3px dashed rgba(0, 122, 255, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; pointer-events: none;
 }
 .drag-overlay-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  font-size: 1.2rem;
-  font-weight: 500;
-  color: white;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column; align-items: center;
+  gap: 1rem; font-size: 1.2rem; font-weight: 500;
+  color: white; text-shadow: 0 1px 3px rgba(0,0,0,0.5);
 }
 </style>
