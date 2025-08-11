@@ -1,22 +1,35 @@
-# Vue 3 全栈企业级商店系统 (Full-Stack Enterprise-Grade Shop System)
+# Vue 3
 
 ![VueJS](https://img.shields.io/badge/Vue.js-3.x-42b883) ![Vite](https://img.shields.io/badge/Vite-^5.0-646cff) ![Pinia](https://img.shields.io/badge/Pinia-^2.1-ffd859) ![Supabase](https://img.shields.io/badge/Supabase-Full%20Stack-3ecf8e) ![Performance](https://img.shields.io/badge/Public%20API%20QPS-%7E140-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
-本项目是一个基于 **Vue 3**、**Vite**、**Pinia** 和 **Supabase** 全家桶构建的、全栈式的企业级电子商务/作品集展示平台。它从一个纯前端的作品集，逐步演进为一个功能完备的全栈应用，其核心目标是通过**企业级的代码架构**、**现代化的工程实践**和**极致的用户体验**，全面展示开发者在前后端整合、数据库设计、API 构建、性能优化和安全策略方面的专业技能。
+本项目是一个基于 **Vue 3**、**Vite**、**Pinia** 和 **Supabase** 全家桶构建的、全栈式的企业级电子商务/作品集展示与工具平台。它从一个纯前端的作品集，逐步演进为一个功能完备的全栈应用，其核心目标是通过**企业级的代码架构**、**现代化的工程实践**和**极致的用户体验**，全面展示开发者在前后端整合、数据库设计、API 构建、性能优化、安全策略以及复杂前端工具开发方面的专业技能。
+
+除了完整的商店系统，本项目还集成了一个功能强大的**在线图片编辑器**，展示了在复杂状态管理、Canvas 操作和高级用户交互方面的深厚实力。
 
 ## ✨ 核心特性
 
 - **惊艳的视觉效果**: 集成了一个由 React/TSX 精心移植而来的赛博朋克风格动态极光背景，包含了粒子、光球、视差、雨滴、闪电、霓虹灯等多种高级视觉特效。
+
 - **现代化的全栈技术栈**: 全面拥抱 Vue 3 Composition API，利用 Vite 提供极速的开发体验。后端采用 **Supabase**，集成了 **Postgres 数据库**、**认证 (Auth)**、**对象存储 (Storage)** 和 **Edge Functions (Serverless API)**。
+
+- **强大的在线图片编辑器**:
+  - **核心功能**: 支持图片的**拖拽/点击上传**、**缩放**、**平移**、**滤镜应用**等基础编辑操作。
+  - **高级交互**: 实现了**全局快捷键**支持（如 `Ctrl/Cmd + Z` 撤销，`Ctrl/Cmd + Y` 重做，`空格键` 拖拽画布），并智能地在输入状态下禁用快捷键，避免冲突。
+  - **非破坏性编辑**: 所有操作都基于历史记录栈，用户可以无限次地**撤销 (Undo)** 和**重做 (Redo)**，保证了原始图片的安全。
+  - **模块化架构**: 编辑器由 `TopMenuBar`, `EditorToolbar`, `CanvasArea`, `RightPanels` 等多个高内聚、低耦合的组件构成，结构清晰，易于扩展。
+
 - **企业级后端架构与优化**:
   - **高性能数据查询**: 通过创建 **Postgres 数据库视图 (View)**，预先聚合商品及其关联图片，将原有的“N+1”查询优化为单次高效查询，数据库负载降低 50% 以上。
   - **CDN 级公共 API**: 利用 **Supabase Edge Function** 和 **CDN 缓存** (`Cache-Control: s-maxage`)，为公开的商品详情页提供了高性能、高可用的 API 端点，轻松应对高并发访问。
   - **安全的数据隔离**: 利用 Postgres 的**行级安全策略 (RLS)**，确保用户只能访问和修改自己的数据。
+
 - **完整的认证系统**: 支持**邮箱/密码**、**OTP (一次性验证码)** 和 **GitHub OAuth** 三种登录方式。通过自定义邮件模板和智能错误处理，提供了安全流畅的注册和登录体验。
-- **智能化的商品管理**:
-  - **独立的编辑/创建页面**: 使用独立的路由 (`/shop/new`, `/shop/edit/:id`) 提供沉浸式的编辑体验。
+
+- **智能化的商品/文件管理**:
+  - **图片/文件保险库**: 新增一个**文件保险库**模块，支持除文件夹外的所有文件上传（如 `.exe`, `.zip`, `.pdf` 等），并提供**批量选择、打包下载、独立删除**等高级文件管理功能。
   - **前端图片压缩**: 集成 `browser-image-compression` 库，在上传前自动优化图片，极大地提升了性能并节省了云存储成本。
   - **健壮的图片管理**: 支持在编辑时更改或删除已上传的图片，并通过后端逻辑自动清理云存储中的孤儿文件。
+
 - **极致的用户体验 (UX)**:
   - **无限滚动加载**: `Shop` 页面采用**无限滚动**加载商品列表，实现了极快的初始加载速度和流畅的浏览体验，避免了传统分页的性能瓶颈。
   - **非阻塞式反馈**: 大量使用自定义的 **Toast 通知**和**确认模态框**，取代了体验糟糕的原生 `alert` 和 `confirm`。
@@ -69,8 +82,8 @@
       VITE_SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
       ```
 4.  **配置 Supabase 后端**
-    - **数据库**: 进入 Supabase 项目的 `SQL Editor`，将本项目根目录 `supabase/migrations` 文件夹中的 SQL 脚本内容（包括 `CREATE VIEW` 语句）粘贴并执行。
-    - **认证**: 在 `Authentication > Providers` 中，启用 `Email` 和 `GitHub`。
+    - **数据库**: 进入 Supabase 项目的 `SQL Editor`，将本项目根目录 `supabase/migrations` 文件夹中的 SQL 脚本内容（包括 `CREATE TABLE`, `CREATE VIEW` 和 RLS 策略）粘贴并执行。
+    - **认证**: 在 `Authentication > Providers` 中，启用 `Email` 和 `GitHub`。同时在 `Authentication > Email Templates` 中自定义邮件模板。
     - **Edge Function**:
       ```bash
       # 登录并链接您的项目
@@ -95,20 +108,35 @@
 │   ├── 📁 functions/
 │   │   ├── 📁 _shared/        # Edge Functions 的共享代码
 │   │   └── 📁 get-product-details/ # (已优化) 高性能公共 API
-│   └── 📁 migrations/         # 数据库迁移脚本 (含视图定义)
+│   └── 📁 migrations/         # 数据库迁移脚本 (含视图和 RLS 策略)
 ├── 📁 public/
 └── 📁 src/
     ├── 📁 assets/             # 静态资源 (SCSS, JSON数据)
     ├── 📁 components/         # 可复用 UI 构建块
-    ├── 📁 lib/                # 第三方库初始化
+    │   └── 📁 editor/         # ✨ 图片编辑器核心组件
+    ├── 📁 composables/        # Vue 组合式函数 (如 useToast, useConfirm)
+    ├── 📁 lib/                # 第三方库初始化 (Supabase Client)
     ├── 📁 router/             # Vue Router 配置
-    ├── 📁 stores/             # Pinia 状态管理 (已优化分页)
-    └── 📁 views/              # 页面级组件 (已优化性能)
+    ├── 📁 stores/             # Pinia 状态管理
+    │   ├── 📄 products.js    # (已优化) 商品分页与 CRUD
+    │   ├── 📄 imageEditor.js # ✨ 图片编辑器状态 (含历史记录)
+    │   └── 📄 fileVault.js    # ✨ 文件保险库状态
+    └── 📁 views/              # 页面级组件
+        ├── 📄 ShopPage.vue    # (已优化) 无限滚动商品列表
+        └── 📄 ImageEditorPage.vue # ✨ 图片编辑器主页面
 ```
 
 ---
 
 ### **核心模块解析**
+
+#### **`📁 src/views/ImageEditorPage.vue` & `📁 src/stores/imageEditor.js` - 在线图片编辑器**
+
+- **`ImageEditorPage.vue`**: 编辑器的主视图，负责整合各个子组件，并处理**全局事件**，如文件拖拽上传和键盘快捷键。
+  - **核心逻辑**: 通过监听 `keydown` 和 `keyup` 事件，实现了撤销/重做和空格平移等高级交互。特别地，它会检查事件目标（`event.target`）来避免在输入框中触发全局快捷键。
+- **`stores/imageEditor.js`**: 图片编辑器的“大脑”，一个 Pinia store，负责管理画布状态和编辑历史。
+  - **状态管理**: 维护 `history` (操作历史记录栈) 和 `historyIndex` (当前指针)，这是实现撤销/重做的基础。
+  - **核心 Actions**: `loadImage`, `applyFilter`, `undo`, `redo` 等 action 封装了所有不纯的操作，保证了状态变更的可预测性。
 
 #### **`📁 supabase/` - 高性能后端**
 
@@ -126,11 +154,8 @@
   - **精细化状态**: 通过 `loading`, `loadingMore`, `hasMore` 等状态，为前端实现复杂的加载 UI（如无限滚动）提供了有力支持。
   - **乐观更新**: 删除操作采用“先从UI移除，再调用API”的乐观更新策略，提供极致的瞬时反馈。
 
-#### **`📁 src/views/` - 性能感知的页面组件**
+#### **`📁 src/views/ShopPage.vue` - 性能感知的页面组件**
 
 - **`ShopPage.vue`**: 用户登录后的主仪表盘。
   - **性能**: 使用 `useIntersectionObserver` 实现了**无限滚动加载**，只在用户滚动到页面底部时才请求下一页数据，确保了极快的初始加载性能。
   - **UI/UX**: 精确处理 `productsLoading` 和 `loadingMore` 状态，为用户提供了清晰的“初始加载”和“加载更多”的视觉反馈，避免了内容闪烁。
-- **`ProductDetailsPage.vue` & `ProductEditPage.vue`**:
-  - **数据获取**: 统一通过调用 `supabase.functions.invoke('get-product-details', ...)` 来加载商品数据，充分享受了后端视图和缓存带来的性能优势。
-  - **职责分离**: 前端组件专注于 UI 展示和用户交互，将复杂的数据聚合逻辑下沉到后端视图中，使得前后端职责更清晰。

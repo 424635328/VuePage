@@ -3,11 +3,11 @@
 <template>
   <div class="file-vault-page">
     <header class="vault-header">
-      <h1>My File Vault</h1>
-      <p>Securely store and manage your private files.</p>
+      <h1>我的文件保险库</h1>
+      <p>安全地存储和管理您的私人文件。</p>
     </header>
 
-    <!-- Upload Zone -->
+    <!-- 上传区域 -->
     <div
       class="upload-zone"
       @dragover.prevent="onDragOver"
@@ -18,15 +18,15 @@
       <input type="file" ref="fileInput" @change="onFileSelect" multiple hidden />
       <div class="upload-content">
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-        <p>Drag & drop files here, or</p>
-        <button @click="triggerFileInput" class="btn-primary">Browse Files</button>
-        <p class="upload-hint">Max file size: 50MB per file.</p>
+        <p>将文件拖拽到此处，或</p>
+        <button @click="triggerFileInput" class="btn-primary">浏览文件</button>
+        <p class="upload-hint">单个文件最大不超过 50MB。</p>
       </div>
     </div>
 
-    <!-- Uploading Files Progress -->
+    <!-- 正在上传的文件进度 -->
     <div v-if="uploadingFiles.length > 0" class="upload-progress-container">
-      <h3>Uploading...</h3>
+      <h3>正在上传...</h3>
       <div v-for="file in uploadingFiles" :key="file.id" class="upload-item">
         <span class="file-name">{{ file.name }}</span>
         <div class="progress-bar">
@@ -36,36 +36,36 @@
       </div>
     </div>
 
-    <!-- 新增: 批量操作栏 -->
+    <!-- 批量操作栏 -->
     <transition name="action-bar-fade">
       <div v-if="selectedFiles.size > 0" class="action-bar">
-        <span class="selection-count">{{ selectedFiles.size }} file(s) selected</span>
+        <span class="selection-count">已选择 {{ selectedFiles.size }} 个文件</span>
         <div class="action-buttons">
           <button @click="downloadSelectedFiles" class="btn-action">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
-            Download as .zip
+            打包下载 (.zip)
           </button>
           <button @click="confirmDeleteSelected" class="btn-action btn-danger">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
-            Delete
+            删除
           </button>
         </div>
-        <button @click="clearSelection" class="btn-clear-selection" title="Clear selection">&times;</button>
+        <button @click="clearSelection" class="btn-clear-selection" title="清空选择">&times;</button>
       </div>
     </transition>
 
-    <!-- File List -->
+    <!-- 文件列表 -->
     <div class="file-list-container">
       <div class="list-header">
-        <h2>Your Files</h2>
+        <h2>您的文件</h2>
         <div class="select-all-container" v-if="files.length > 0">
             <input type="checkbox" id="select-all" @change="toggleSelectAll" :checked="isAllSelected" />
-            <label for="select-all">Select All</label>
+            <label for="select-all">全选</label>
         </div>
       </div>
-      <div v-if="loading" class="loading-spinner">Loading files...</div>
+      <div v-if="loading" class="loading-spinner">正在加载文件...</div>
       <div v-else-if="files.length === 0" class="empty-state">
-        <p>Your vault is empty. Upload your first file!</p>
+        <p>您的保险库是空的，快上传第一个文件吧！</p>
       </div>
       <div v-else class="file-grid">
         <div
@@ -93,7 +93,7 @@
             <textarea
               :value="file.description"
               @input="onDescriptionInput(file.id, $event.target.value)"
-              placeholder="Add a description..."
+              placeholder="添加描述..."
               class="description-textarea"
               rows="2"
               @click.stop
@@ -101,18 +101,18 @@
           </div>
 
           <div class="card-footer">
-            <button @click.stop="downloadSingleFile(file)" class="btn-card-action" title="Download file">
+            <button @click.stop="downloadSingleFile(file)" class="btn-card-action" title="下载文件">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
             </button>
-            <button @click.stop="confirmDelete(file)" class="btn-card-action btn-danger" title="Delete file">
+            <button @click.stop="confirmDelete(file)" class="btn-card-action btn-danger" title="删除文件">
                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
             </button>
           </div>
         </div>
       </div>
       <div ref="observerEl" class="observer">
-         <span v-if="loadingMore">Loading more files...</span>
-         <span v-if="!hasMore && files.length > 0">No more files.</span>
+         <span v-if="loadingMore">正在加载更多文件...</span>
+         <span v-if="!hasMore && files.length > 0">没有更多文件了。</span>
       </div>
     </div>
   </div>
@@ -124,6 +124,7 @@ import { storeToRefs } from 'pinia'
 import { useFileVaultStore } from '@/stores/fileVault'
 import { useIntersectionObserver, useDebounceFn } from '@vueuse/core'
 import { useConfirm } from '@/composables/useConfirm'
+import { useToast } from '@/composables/useToast'
 
 const fileVaultStore = useFileVaultStore()
 const {
@@ -134,6 +135,7 @@ const {
   updateFileDescription, downloadSingleFile, downloadSelectedFiles
 } = fileVaultStore
 const { showConfirm } = useConfirm()
+const { addToast } = useToast()
 
 const fileInput = ref(null)
 const isDragging = ref(false)
@@ -149,15 +151,45 @@ useIntersectionObserver(observerEl, ([{ isIntersecting }]) => {
   }
 })
 
-// Drag and drop handlers
+// 拖拽处理
 const onDragOver = () => { isDragging.value = true }
 const onDragLeave = () => { isDragging.value = false }
 const onDrop = (e) => {
-  isDragging.value = false
-  handleFiles(e.dataTransfer.files)
+  isDragging.value = false;
+  const filesToUpload = [];
+  let wasFolderDropped = false;
+
+  if (e.dataTransfer.items) {
+    for (const item of e.dataTransfer.items) {
+      const entry = item.webkitGetAsEntry();
+      if (entry?.isFile) {
+        const file = item.getAsFile();
+        if (file) {
+          filesToUpload.push(file);
+        }
+      } else if (entry?.isDirectory) {
+        wasFolderDropped = true;
+      }
+    }
+  } else {
+    for (const file of e.dataTransfer.files) {
+      filesToUpload.push(file);
+    }
+  }
+
+  if (filesToUpload.length > 0) {
+    handleFiles(filesToUpload);
+  }
+
+  if (wasFolderDropped) {
+    addToast({
+      message: '不支持上传文件夹，已自动忽略。',
+      type: 'warning',
+    });
+  }
 }
 
-// File input handlers
+// 文件输入处理
 const triggerFileInput = () => { fileInput.value.click() }
 const onFileSelect = (e) => {
   handleFiles(e.target.files)
@@ -165,13 +197,13 @@ const onFileSelect = (e) => {
 }
 
 const handleFiles = (fileList) => {
-  if (!fileList.length) return
+  if (!fileList || fileList.length === 0) return
   for (const file of fileList) {
     uploadFile(file)
   }
 }
 
-// Selection logic
+// 选择逻辑
 const toggleSelection = (fileId) => {
   if (selectedFiles.value.has(fileId)) {
     selectedFiles.value.delete(fileId)
@@ -196,46 +228,44 @@ const toggleSelectAll = () => {
     }
 }
 
-
-// Description update logic
+// 描述更新逻辑
 const onDescriptionInput = useDebounceFn((fileId, value) => {
   updateFileDescription(fileId, value)
 }, 750)
 
-// Deletion logic
+// 删除逻辑
 const confirmDelete = async (file) => {
   const isConfirmed = await showConfirm({
-    title: 'Confirm Deletion',
-    message: `Are you sure you want to permanently delete '${file.file_name}'?`,
-    confirmText: 'Delete'
+    title: '确认删除',
+    message: `您确定要永久删除 '${file.file_name}' 吗？此操作无法撤销。`,
+    confirmText: '删除',
+    cancelText: '取消'
   })
   if (isConfirmed) {
     deleteFile(file)
-    selectedFiles.value.delete(file.id) // Also remove from selection
   }
 }
 
 const confirmDeleteSelected = async () => {
   const count = selectedFiles.value.size;
   const isConfirmed = await showConfirm({
-    title: `Delete ${count} Files`,
-    message: `Are you sure you want to permanently delete all ${count} selected files? This action cannot be undone.`,
-    confirmText: 'Delete All',
-    cancelText: 'Cancel'
+    title: `删除 ${count} 个文件`,
+    message: `您确定要永久删除所有 ${count} 个选中的文件吗？此操作无法撤销。`,
+    confirmText: '全部删除',
+    cancelText: '取消'
   })
   if (isConfirmed) {
     const filesToDelete = files.value.filter(f => selectedFiles.value.has(f.id));
     await Promise.all(filesToDelete.map(file => deleteFile(file)))
-    clearSelection()
   }
 }
 
-// Helper functions
+// 帮助函数
 const formatBytes = (bytes, decimals = 2) => {
-  if (bytes === 0) return '0 Bytes'
+  if (bytes === 0) return '0 字节'
   const k = 1024
   const dm = decimals < 0 ? 0 : decimals
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+  const sizes = ['字节', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]
 }
@@ -246,7 +276,7 @@ const getFileExtension = (filename) => {
 </script>
 
 <style scoped lang="scss">
-/* Adopting a style that fits your cyberpunk/modern aesthetic */
+/* 样式部分保持不变，因为它们与语言无关 */
 .file-vault-page {
   padding: 2rem;
   max-width: 1200px;
@@ -275,6 +305,7 @@ const getFileExtension = (filename) => {
 .btn-primary {
   background-color: #42b883; color: white; border: none; padding: 0.8rem 1.5rem;
   border-radius: 5px; cursor: pointer; transition: background-color 0.3s;
+  font-weight: 600;
   &:hover { background-color: #3aa071; }
 }
 
@@ -326,7 +357,7 @@ const getFileExtension = (filename) => {
   }
   .select-all-container {
       display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem;
-      label { cursor: pointer; }
+      label { cursor: pointer; user-select: none; }
       input { cursor: pointer; }
   }
 }
@@ -390,5 +421,13 @@ const getFileExtension = (filename) => {
 
 .observer {
   height: 50px; text-align: center; padding: 1rem; color: #888;
+}
+
+.loading-spinner, .empty-state {
+    text-align: center;
+    padding: 4rem 0;
+    color: #888;
+    background: rgba(30, 30, 30, 0.5);
+    border-radius: 8px;
 }
 </style>
