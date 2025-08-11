@@ -111,10 +111,24 @@ onUnmounted(() => {
 
       <nav class="desktop-nav" aria-label="主导航">
         <ul>
-          <li><RouterLink to="/">首页</RouterLink></li>
-          <li><RouterLink to="/shop">商店</RouterLink></li>
-          <li><RouterLink to="/projects">产品</RouterLink></li>
-          <li><RouterLink to="/editor">编辑器</RouterLink></li>
+          <li>
+            <RouterLink to="/">首页</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/shop">商店</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/projects">产品</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/editor">编辑器</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/vault">存储</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/NotFoundPage">404 Not Found</RouterLink>
+          </li>
         </ul>
       </nav>
 
@@ -135,7 +149,8 @@ onUnmounted(() => {
           </button>
         </template>
 
-        <button class="hamburger" @click="toggleMobileMenu" :class="{ active: isMobileMenuOpen }" aria-label="切换导航菜单" :aria-expanded="isMobileMenuOpen" aria-controls="mobile-nav-list">
+        <button class="hamburger" @click="toggleMobileMenu" :class="{ active: isMobileMenuOpen }" aria-label="切换导航菜单"
+          :aria-expanded="isMobileMenuOpen" aria-controls="mobile-nav-list">
           <span class="bar"></span>
           <span class="bar"></span>
           <span class="bar"></span>
@@ -146,12 +161,30 @@ onUnmounted(() => {
     <transition name="slide-fade">
       <nav v-if="isMobileMenuOpen" class="mobile-nav" aria-label="移动端导航">
         <ul id="mobile-nav-list">
-          <li><RouterLink to="/">首页</RouterLink></li>
-          <li><RouterLink to="/shop">商店</RouterLink></li>
-          <li><RouterLink to="/projects">产品</RouterLink></li>
-          <li><RouterLink to="/about">关于我们</RouterLink></li>
-          <li><RouterLink to="/contact">联系我们</RouterLink></li>
-          <li><RouterLink to="/editor">编辑器</RouterLink></li>
+          <li>
+            <RouterLink to="/">首页</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/shop">商店</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/projects">产品</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/about">关于我们</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/contact">联系我们</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/editor">编辑器</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/vault">存储</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/NotFoundPage">404 Not Found</RouterLink>
+          </li>
 
 
           <!-- **改动 4: 同步移动端菜单的逻辑** -->
@@ -219,6 +252,7 @@ onUnmounted(() => {
   text-decoration: none;
   flex-shrink: 0;
 }
+
 .logo img {
   width: 40px;
   height: 40px;
@@ -237,8 +271,10 @@ onUnmounted(() => {
     list-style: none;
     margin: 0;
     padding: 0;
-    gap: 2rem; /* 稍微减小间距以容纳更多项 */
+    gap: 2rem;
+    /* 稍微减小间距以容纳更多项 */
   }
+
   a {
     color: var(--color-text);
     font-size: 1rem;
@@ -246,6 +282,7 @@ onUnmounted(() => {
     position: relative;
     text-decoration: none;
   }
+
   a::after {
     content: '';
     position: absolute;
@@ -257,10 +294,12 @@ onUnmounted(() => {
     background-color: var(--color-primary);
     transition: width 0.3s;
   }
+
   a:hover,
   a.router-link-exact-active {
     color: var(--color-heading);
   }
+
   a.router-link-exact-active::after {
     width: 100%;
   }
@@ -294,17 +333,17 @@ onUnmounted(() => {
 }
 
 .auth-button {
-    background-color: transparent;
-    border: 1px solid var(--color-primary);
-    color: var(--color-primary);
-    box-shadow: none;
+  background-color: transparent;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  box-shadow: none;
 
-    &:hover {
-        background-color: var(--color-primary);
-        color: #1a1a1a;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(var(--color-primary-rgb), 0.2);
-    }
+  &:hover {
+    background-color: var(--color-primary);
+    color: #1a1a1a;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(var(--color-primary-rgb), 0.2);
+  }
 }
 
 .hamburger {
@@ -318,6 +357,7 @@ onUnmounted(() => {
   cursor: pointer;
   padding: 0;
   z-index: 2000;
+
   .bar {
     display: block;
     width: 2rem;
@@ -327,13 +367,16 @@ onUnmounted(() => {
     transition: all 0.3s ease-in-out;
     transform-origin: center;
   }
+
   &.active .bar:nth-child(1) {
     transform: translateY(11px) rotate(45deg);
   }
+
   &.active .bar:nth-child(2) {
     opacity: 0;
     transform: translateX(-100%);
   }
+
   &.active .bar:nth-child(3) {
     transform: translateY(-11px) rotate(-45deg);
   }
@@ -353,8 +396,17 @@ onUnmounted(() => {
   align-items: center;
   flex-direction: column;
   z-index: 1500;
-  ul { list-style: none; padding: 0; text-align: center; }
-  li { margin: 1.5rem 0; }
+
+  ul {
+    list-style: none;
+    padding: 0;
+    text-align: center;
+  }
+
+  li {
+    margin: 1.5rem 0;
+  }
+
   a {
     color: var(--color-heading);
     font-size: 1.8rem;
@@ -362,6 +414,7 @@ onUnmounted(() => {
     text-decoration: none;
     padding: 0.5rem 1rem;
     transition: color 0.3s;
+
     &:hover {
       color: var(--color-primary);
     }
@@ -384,6 +437,7 @@ onUnmounted(() => {
   min-width: 180px;
   text-align: center;
   text-decoration: none;
+
   &.auth-button {
     background-color: transparent;
     border: 1px solid var(--color-primary);
@@ -394,9 +448,11 @@ onUnmounted(() => {
 .slide-fade-enter-active {
   transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
 }
+
 .slide-fade-leave-active {
   transition: all 0.3s cubic-bezier(0.755, 0.05, 0.855, 0.06);
 }
+
 .slide-fade-enter-from,
 .slide-fade-leave-to {
   transform: translateY(-30px);
@@ -407,12 +463,16 @@ onUnmounted(() => {
   .desktop-nav {
     display: none;
   }
-  .header-actions .cta-button, .header-actions .auth-button {
+
+  .header-actions .cta-button,
+  .header-actions .auth-button {
     display: none;
   }
+
   .hamburger {
     display: flex;
   }
+
   .mobile-nav {
     display: flex;
   }

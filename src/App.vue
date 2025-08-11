@@ -5,10 +5,14 @@ import { onMounted } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 import { supabase } from './lib/supabaseClient';
 import { useAuthStore } from './stores/auth';
+
+// 导入所有需要的 UI 组件
 import AuroraBackground from './components/AuroraBackground.vue';
 import AppHeader from './components/AppHeader.vue';
 import AppFooter from './components/AppFooter.vue';
 import AppToast from './components/common/AppToast.vue';
+// --- 1. 导入 ConfirmDialog 组件 ---
+import ConfirmDialog from './components/global/ConfirmDialog.vue';
 
 // 初始化 Pinia store 和 Vue Router
 const authStore = useAuthStore();
@@ -56,7 +60,16 @@ onMounted(() => {
     </main>
 
     <AppFooter />
+
+    <!-- 全局UI组件层 -->
+    <!-- 这些组件不属于任何特定页面，而是为整个应用提供服务 -->
+
+    <!-- 现有的 Toast 通知组件 -->
     <AppToast />
+
+    <!-- --- 2. 在模板的根部添加 ConfirmDialog 组件 --- -->
+    <!-- 将它放在这里可以确保它在所有页面之上显示 -->
+    <ConfirmDialog />
   </div>
 </template>
 
