@@ -7,6 +7,8 @@ import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
+import { useIntersectionObserver } from '@vueuse/core';
+
 import ProductCard from '@/components/shop/ProductCard.vue';
 import FloatingActions from '@/components/shop/FloatingActions.vue';
 import AuthModal from '@/components/auth/AuthModal.vue';
@@ -16,51 +18,63 @@ const authStore = useAuthStore();
 const { user, loading: authLoading } = storeToRefs(authStore);
 
 const productsStore = useProductsStore();
-const { products, loading: productsLoading, error } = storeToRefs(productsStore);
+// 从 store 中获取所有需要的 state，包括分页相关的
+const { products, loading: productsLoading, error, hasMore, loadingMore } = storeToRefs(productsStore);
 
 const toastStore = useToastStore();
 const router = useRouter();
 
-// State for modals
+// Modals and data state
 const isAuthModalOpen = ref(false);
 const isConfirmModalOpen = ref(false);
-
-// State for data being acted upon
 const productToDelete = ref(null);
 
-// ✨ 修复：这个 watcher 现在是响应UI变化的主要驱动力
+// 核心数据加载逻辑：只在 user 状态变化时触发
 watch(user, (newUser, oldUser) => {
-  // 当 user 从 null 变为有值时，说明登录成功
-  if (newUser && !oldUser) {
-    console.log('User state changed to logged in, fetching products...');
-    isAuthModalOpen.value = false; // 确保模态框关闭
-    productsStore.fetchProducts();
-  } else if (!newUser && oldUser) {
-    // 当 user 从有值变为 null 时，说明登出
-    console.log('User state changed to logged out, clearing products...');
+  if (newUser && !oldUser) { // 登录成功
+    isAuthModalOpen.value = false;
+    productsStore.fetchInitialProducts();
+  } else if (!newUser && oldUser) { // 登出
     productsStore.clearProducts();
   }
 });
 
+// onMounted 只处理页面刷新时用户已登录的情况
 onMounted(() => {
-  // onMounted 逻辑保持不变，处理页面刷新后的情况
-  if (user.value) {
-    productsStore.fetchProducts();
+  // 如果用户已登录，但商品列表为空（可能是在当前页面刷新）
+  if (user.value && products.value.length === 0) {
+    productsStore.fetchInitialProducts();
   }
 });
 
-function onLoggedIn() {
-  console.log('AuthModal emitted loggedIn event.');
-  if(user.value) {
-    productsStore.fetchProducts();
+// --- 无限滚动逻辑 ---
+const loadMoreTrigger = ref(null); // 这是我们将要观察的元素
+
+useIntersectionObserver(
+  loadMoreTrigger,
+  ([{ isIntersecting }]) => {
+    // 当触发元素进入视口，并且有更多数据、不在加载中、且用户已登录时
+    if (isIntersecting && hasMore.value && !loadingMore.value && user.value) {
+      productsStore.fetchMoreProducts();
+    }
+  },
+  {
+    rootMargin: '300px', // 距离底部 300px 时就开始预加载
   }
-}
+);
+
+// --- 事件处理函数 ---
+
+// AuthModal 的 @loggedIn 事件现在不再需要做任何事，因为 watcher 会处理
+function onLoggedIn() {}
 
 function handleAddProduct() {
   router.push({ name: 'product-new' });
 }
 
 function handleEditProduct(product) {
+  // 导航前将数据暂存到 store，实现详情页瞬时加载
+  productsStore.selectProductForDetailPage(product);
   router.push({ name: 'product-edit', params: { public_id: product.public_id } });
 }
 
@@ -69,7 +83,6 @@ function handleDeleteProduct(product) {
   isConfirmModalOpen.value = true;
 }
 
-// ✨ FIX: The call to deleteProduct now only passes the product's ID.
 async function confirmDeletion() {
   if (productToDelete.value) {
     await productsStore.deleteProduct(productToDelete.value.id);
@@ -88,7 +101,6 @@ async function handleCopyLink(product) {
     toastStore.showToast({ msg: '复制失败，请检查浏览器权限', toastType: 'error' });
   }
 }
-
 </script>
 
 <template>
@@ -114,13 +126,13 @@ async function handleCopyLink(product) {
 
       <!-- Main Content Area -->
       <div v-else class="shop-content">
-        <!-- Loading State -->
+        <!-- 初始加载状态 -->
         <div v-if="productsLoading" class="loading-state">
           <div class="spinner"></div>
           <p>正在加载商品...</p>
         </div>
 
-        <!-- Error State -->
+        <!-- 错误状态 -->
         <div v-else-if="error" class="error-state">
           <div class="prompt-icon error">
              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
@@ -130,7 +142,7 @@ async function handleCopyLink(product) {
           <p class="error-details">错误信息: {{ error }}</p>
         </div>
 
-        <!-- Empty State -->
+        <!-- 空状态 -->
         <div v-else-if="!productsLoading && products.length === 0" class="empty-state">
           <div class="prompt-icon">
              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
@@ -139,19 +151,27 @@ async function handleCopyLink(product) {
           <p>看起来您还没有添加任何商品。点击右下角的 '+' 按钮开始创作吧！</p>
         </div>
 
-        <!-- Products Grid -->
-        <div v-else class="products-grid">
-          <ProductCard
-            v-for="product in products"
-            :key="product.id"
-            :product="product"
-          >
-            <template #actions>
-              <button @click.stop.prevent="handleEditProduct(product)" class="action-btn">编辑</button>
-              <button @click.stop.prevent="handleCopyLink(product)" class="action-btn">复制链接</button>
-              <button @click.stop.prevent="handleDeleteProduct(product)" class="action-btn delete-btn">删除</button>
-            </template>
-          </ProductCard>
+        <!-- Products Grid & Infinite Scroll -->
+        <div v-else>
+          <div class="products-grid">
+            <ProductCard
+              v-for="product in products"
+              :key="product.id"
+              :product="product"
+            >
+              <template #actions>
+                <button @click.stop.prevent="handleEditProduct(product)" class="action-btn">编辑</button>
+                <button @click.stop.prevent="handleCopyLink(product)" class="action-btn">复制链接</button>
+                <button @click.stop.prevent="handleDeleteProduct(product)" class="action-btn delete-btn">删除</button>
+              </template>
+            </ProductCard>
+          </div>
+
+          <!-- 无限滚动加载指示器 -->
+          <div ref="loadMoreTrigger" class="load-more-indicator">
+            <div v-if="loadingMore" class="spinner"></div>
+            <p v-else-if="!hasMore && products.length > 0">已经到底啦~</p>
+          </div>
         </div>
       </div>
     </div>
@@ -171,8 +191,8 @@ async function handleCopyLink(product) {
 </template>
 
 <style lang="scss" scoped>
-/* All styles remain the same and do not need to be changed. */
 @use '@/assets/styles/index.scss' as *;
+
 // --- Animation Keyframes ---
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(20px); }
@@ -285,6 +305,26 @@ async function handleCopyLink(product) {
   gap: 2rem;
   animation: fadeIn 0.8s ease-out 0.2s forwards;
   opacity: 0;
+}
+
+// --- Load More Indicator Styles ---
+.load-more-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 0;
+  min-height: 120px; // 给予足够的高度，以便 useIntersectionObserver 能够可靠地触发
+
+  p {
+    color: var(--color-text-dark);
+  }
+
+  // 这里的 spinner 可以复用上面的，但去掉 margin-bottom
+  .spinner {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 0;
+  }
 }
 
 // --- Responsive Adjustments ---
