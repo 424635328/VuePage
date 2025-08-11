@@ -7,79 +7,82 @@ import imageCompression from 'browser-image-compression';
 import draggable from 'vuedraggable';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient'; // 仅用于 productsStore
 
 const route = useRoute();
 const router = useRouter();
 const productsStore = useProductsStore();
 const toastStore = useToastStore();
 
-const form = ref({ id: null, name: '', description: '' });
-const images = ref([]);
+const form = ref({ id: null, public_id: null, name: '', description: '' });
+const images = ref([]); // { id, image_url, _file? }
 const loading = ref(true);
 const saving = ref(false);
 const error = ref(null);
 const isDragOver = ref(false);
 
-const productId = computed(() => route.params.id);
-const isEditing = computed(() => !!productId.value);
+const publicId = computed(() => route.params.public_id); // 改为使用 public_id
+const isEditing = computed(() => !!publicId.value);
 const pageTitle = computed(() => isEditing.value ? '编辑商品' : '创建新商品');
 
 const fileInput = ref(null);
 
+// ✨ 重构 onMounted 逻辑
 onMounted(async () => {
   if (isEditing.value) {
-    if (productsStore.selectedProduct && productsStore.selectedProduct.id == productId.value) {
-      console.log('Loading product from store...');
-      form.value = { ...productsStore.selectedProduct };
-      await fetchProductImages(form.value.id);
-    } else {
-      console.log('Product not in store, fetching from API...');
-      await loadProductFromAPI(productId.value);
-    }
+    await loadProductForEdit(publicId.value);
+  } else {
+    // 创建新商品模式，直接完成加载
+    loading.value = false;
   }
-  loading.value = false;
 });
 
-async function loadProductFromAPI(id) {
+// ✨ 核心优化：创建一个统一的数据加载函数，调用我们优化过的 Edge Function
+async function loadProductForEdit(pid) {
+  loading.value = true;
+  error.value = null;
   try {
-    const { data, error: productError } = await supabase
-      .from('products').select('*').eq('id', id).single();
-    if (productError) throw productError;
-    form.value = data;
-    await fetchProductImages(data.id);
+    // 调用 get-product-details Edge Function
+    const { data, error: functionError } = await supabase.functions.invoke('get-product-details', {
+      body: { public_id: pid },
+    });
+
+    if (functionError) throw functionError;
+    if (data.error) throw new Error(data.error);
+
+    // 将返回的数据填充到表单和图片数组中
+    form.value = {
+      id: data.id,
+      public_id: data.public_id,
+      name: data.name,
+      description: data.description,
+    };
+
+    // images 数组现在也直接从返回的数据中获取
+    images.value = data.images || [];
+
   } catch (e) {
     error.value = "无法加载商品数据。";
+    console.error("加载编辑数据失败:", e);
     toastStore.showToast({ msg: e.message, toastType: 'error' });
+  } finally {
+    loading.value = false;
   }
 }
 
-async function fetchProductImages(id) {
-  try {
-    const { data, error: imageError } = await supabase
-      .from('product_images').select('id, image_url').eq('product_id', id).order('position');
-    if (imageError) throw imageError;
-    images.value = data || [];
-  } catch (e) {
-    error.value = "无法加载商品图片。";
-    toastStore.showToast({ msg: `加载图片失败: ${e.message}`, toastType: 'error' });
-  }
-}
-
+// 触发文件输入框的函数保持不变
 function triggerFileInput() {
   fileInput.value.click();
 }
 
+// 处理和压缩文件的函数保持不变
 async function processFiles(files) {
   if (!files || files.length === 0) return;
-
   const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true };
   toastStore.showToast({ msg: `正在处理 ${files.length} 张图片...`, toastType: 'info' });
-
   try {
     const compressionPromises = Array.from(files).map(file => imageCompression(file, options));
     const compressedFiles = await Promise.all(compressionPromises);
-
     compressedFiles.forEach(file => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -99,33 +102,29 @@ async function processFiles(files) {
   }
 }
 
-async function handleFileChange(event) {
-  await processFiles(event.target.files);
-}
+// 文件选择和拖放处理函数保持不变
+async function handleFileChange(event) { await processFiles(event.target.files); }
+async function handleDrop(event) { isDragOver.value = false; await processFiles(event.dataTransfer.files); }
 
-async function handleDrop(event) {
-  isDragOver.value = false;
-  await processFiles(event.dataTransfer.files);
-}
+// 删除图片的函数保持不变
+function removeImage(index) { images.value.splice(index, 1); }
 
-function removeImage(index) {
-  images.value.splice(index, 1);
-}
-
+// ✨ 表单提交逻辑小幅调整，确保数据结构正确
 async function handleSubmit() {
   if (!form.value.name.trim()) {
     toastStore.showToast({ msg: '商品名称不能为空', toastType: 'error' });
     return;
   }
-
   saving.value = true;
   try {
     const newImageFilesToUpload = images.value
       .filter(img => img._file)
       .map(img => img._file);
 
+    // 确保 existingImagesForUpdate 的数据结构是正确的
     const existingImagesForUpdate = images.value
-      .filter(img => typeof img.id === 'number');
+      .filter(img => !img._file)
+      .map(img => ({ id: img.id, image_url: img.image_url, position: img.position }));
 
     let result;
     if (isEditing.value) {
@@ -133,18 +132,20 @@ async function handleSubmit() {
         form.value.id,
         form.value,
         newImageFilesToUpload,
-        existingImagesForUpdate
+        existingImagesForUpdate // 传递整个对象数组
       );
     } else {
       result = await productsStore.addProduct(form.value, newImageFilesToUpload);
     }
-
     if (result) {
       toastStore.showToast({ msg: `商品 "${result.name}" 已保存!` });
-      router.push({ name: 'shop' });
+      // ✨ 优化：保存后直接跳转到新的/编辑后的详情页，提供更流畅的体验
+      router.push({ name: 'product-details', params: { public_id: result.public_id } });
     }
   } catch (err) {
     console.error("Submit error:", err);
+    // 可以在这里添加一个 toast 通知用户保存失败
+    toastStore.showToast({ msg: '保存失败，请稍后重试', toastType: 'error' });
   } finally {
     saving.value = false;
   }
@@ -305,7 +306,7 @@ async function handleSubmit() {
   gap: 1rem;
 }
 .image-gallery-grid {
-  display: contents; 
+  display: contents;
 }
 .gallery-item {
   position: relative;

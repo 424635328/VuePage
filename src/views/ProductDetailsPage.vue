@@ -74,37 +74,40 @@ async function loadProductData() {
   loading.value = true;
   error.value = null;
   try {
-    const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-product-details?public_id=${props.public_id}`;
-    const response = await fetch(functionUrl);
-    if (!response.ok) {
-        let errorData = { error: `服务器错误: ${response.status}` };
-        try {
-            errorData = await response.json();
-        } catch (_e) {
-            console.error('无法解析错误响应:', _e);
-        }
-        throw new Error(errorData.error || `服务器错误: ${response.status}`);
+    // ✨ 优化点 1: 在前端直接调用 Edge Function，而不是通过 fetch API
+    // 这样代码更简洁，并且能更好地处理错误
+    const { data, error: functionError } = await supabase.functions.invoke('get-product-details', {
+      body: { public_id: props.public_id },
+    });
+
+    // 如果 Edge Function 调用本身出错（比如网络问题或服务器5xx错误）
+    if (functionError) {
+      throw functionError;
     }
-    const data = await response.json();
+
+    // Edge Function 内部可能返回业务错误（比如404）
+    if (data.error) {
+      // 创建一个和 Supabase 错误结构类似的对象，方便统一处理
+      throw { message: data.error, code: 'CUSTOM_404' };
+    }
+
+    // ✨ 核心优化：直接使用 Edge Function 返回的完整数据
+    // data 现在包含了 product 的所有字段以及一个 images 数组
     product.value = data;
-
-    const { data: imageData, error: imageError } = await supabase
-      .from('product_images').select('id, image_url').eq('product_id', data.id).order('position');
-    if (imageError) throw imageError;
-
-    images.value = imageData;
-    currentImage.value = imageData.length > 0 ? imageData[0].image_url : (data.thumbnail_url || '');
+    images.value = data.images || []; // 如果没有图片，确保 images 是个空数组
+    currentImage.value = images.value.length > 0 ? images.value[0].image_url : (data.thumbnail_url || '');
 
     updateMetaTags(data, currentImage.value);
+
   } catch (e) {
+    // 统一处理所有错误
     error.value = e.message;
     toastStore.showToast({ msg: `获取商品详情失败: ${e.message}`, toastType: 'error' });
-    console.error('获取商品详情失败:', e.message);
+    console.error('获取商品详情失败:', e); // 打印完整的错误对象以供调试
   } finally {
     loading.value = false;
   }
 }
-
 function selectImage(url) {
   currentImage.value = url;
 }

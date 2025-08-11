@@ -1,0 +1,4 @@
+export HTTPS_PROXY="http://127.0.0.1:7890" && k6 run tests/performance-test.js -e SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB2bW9sdXdzbWllbXJndmRydHl6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxMTU5OTUsImV4cCI6MjA2OTY5MTk5NX0.G8vXx-gVAUt85UVr4JzLgltqsmD7LLFqLKbUgrXOCwg" -e TEST_USER_EMAIL="miraclehcat@gmail.com" -e TEST_USER_PASSWORD="123456" -e PUBLIC_PRODUCT_ID="56aad5fa-cdf3-40e1-b6ab-d45256f9ff1e"
+
+
+k6 run tests/performance-test.js -e SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB2bW9sdXdzbWllbXJndmRydHl6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQxMTU5OTUsImV4cCI6MjA2OTY5MTk5NX0.G8vXx-gVAUt85UVr4JzLgltqsmD7LLFqLKbUgrXOCwg" -e TEST_USER_EMAIL="miraclehcat@gmail.com" -e TEST_USER_PASSWORD="123456" -e PUBLIC_PRODUCT_ID="56aad5fa-cdf3-40e1-b6ab-d45256f9ff1e"
