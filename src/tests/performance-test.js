@@ -1,3 +1,5 @@
+// src/tests/performance-test.js
+
 /* global __ENV */
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
