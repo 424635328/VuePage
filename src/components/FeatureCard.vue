@@ -3,7 +3,6 @@
 <template>
   <div class="feature-card">
     <div class="card-icon">
-      <!-- 定义一个插槽，让父组件可以传入 SVG 图标 -->
       <slot name="icon"></slot>
     </div>
     <h3 class="card-title">{{ title }}</h3>

@@ -10,10 +10,8 @@ const props = defineProps({
   active: { type: Boolean, default: false },
   /**
    * 视频文件的路径。
-   * 重要提示：为了获得最佳性能，请将此视频文件放置在项目的 `public` 目录下，
-   * 这样它就不会被Webpack处理，可以直接通过URL访问。
-   * 例如，如果文件是 `public/video.mp4`，则此处的路径应为 `/video.mp4`。
-   */
+   * 建议放置在 `public` 目录下，例如 `/video.mp4`。
+   */ 
   videoSrc: { type: String, required: true },
   /**
    * 视频播放结束后显示的提示文字
@@ -24,11 +22,12 @@ const props = defineProps({
 const emit = defineEmits(['update:active']);
 
 // 响应式引用
-const videoPlayer = ref(null);      // 用于获取 video DOM 元素
-const isVideoFinished = ref(false); // 状态：视频是否已播放完毕
+const videoPlayer = ref(null);
+const isVideoFinished = ref(false);
+const isDismissing = ref(false); // 新增状态，防止重复触发关闭
 
 /**
- * 当视频播放结束时触发此函数。
+ * 当视频播放结束时触发。
  */
 const onVideoEnded = () => {
   isVideoFinished.value = true;
@@ -36,12 +35,14 @@ const onVideoEnded = () => {
 
 /**
  * 点击屏幕以关闭开屏动画。
- * 此函数仅在视频播放完毕后才有效。
+ * 此函数现在可以随时触发，实现“跳过”功能。
  */
 const dismiss = () => {
-  if (isVideoFinished.value) {
-    emit('update:active', false);
-  }
+  // 如果正在关闭中，则不执行任何操作，防止重复点击
+  if (isDismissing.value) return;
+
+  isDismissing.value = true;
+  emit('update:active', false);
 };
 
 /**
@@ -49,13 +50,12 @@ const dismiss = () => {
  */
 const resetState = () => {
   isVideoFinished.value = false;
+  isDismissing.value = false; // 重置关闭状态
   // 确保 DOM 更新后再操作 video 元素
   nextTick(() => {
     if (videoPlayer.value) {
-      videoPlayer.value.currentTime = 0; // 将视频重置到开头
+      videoPlayer.value.currentTime = 0;
       videoPlayer.value.play().catch(error => {
-        // 自动播放可能会被浏览器阻止，尤其是在用户没有与页面交互过的情况下。
-        // muted 属性通常可以解决此问题。
         console.error("视频自动播放失败:", error);
       });
     }
@@ -68,7 +68,7 @@ watch(() => props.active, (isActive) => {
     // 当组件被激活时，重置状态并准备播放
     resetState();
   }
-}, { immediate: true }); // immediate: true 确保组件首次加载时也能执行
+}, { immediate: true });
 
 </script>
 
@@ -77,7 +77,6 @@ watch(() => props.active, (isActive) => {
     <div
       v-if="active"
       class="splash-screen-container"
-      :class="{ 'is-interactive': isVideoFinished }"
       @click="dismiss"
     >
       <video
@@ -90,20 +89,11 @@ watch(() => props.active, (isActive) => {
         preload="auto"
         @ended="onVideoEnded"
       >
-        <!--
-          视频属性说明:
-          - ref="videoPlayer": 获取DOM元素的引用。
-          - :src="videoSrc": 动态绑定视频源。
-          - autoplay: 页面加载后自动播放。
-          - muted: 静音播放。这是大多数现代浏览器允许自动播放的前提条件。
-          - playsinline: 在移动设备上（尤其是iOS）内联播放，而不是强制全屏。
-          - preload="auto": 提示浏览器尽快加载整个视频文件。
-          - @ended="onVideoEnded": 监听视频播放完成事件。
-        -->
         你的浏览器不支持 Video 标签。
       </video>
 
       <Transition name="prompt-fade">
+        <!-- 提示文字仅在视频自然播放结束后显示 -->
         <div v-if="isVideoFinished" class="click-prompt">
           {{ promptText }}
         </div>
@@ -119,17 +109,16 @@ watch(() => props.active, (isActive) => {
   z-index: 9999;
   background-color: #000;
   overflow: hidden;
-  cursor: default; /* 默认情况下是普通光标 */
-
-  &.is-interactive {
-    cursor: pointer; /* 视频播放完毕后，光标变为手型 */
-  }
+  /* 直接设置为指针，表示任何时候都可以点击跳过 */
+  cursor: pointer;
 }
 
 .fullscreen-video {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* 保持视频的宽高比，同时填满整个容器 */
+  object-fit: cover;
+  /* 确保视频本身不会捕获点击事件，让容器来处理 */
+  pointer-events: none;
 }
 
 .click-prompt {
@@ -144,11 +133,10 @@ watch(() => props.active, (isActive) => {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 16px;
   text-align: center;
-  pointer-events: none; /* 确保提示文字不会阻挡对容器的点击事件 */
+  pointer-events: none;
   animation: pulse 2s infinite;
 }
 
-/* 定义提示文字的浮动动画 */
 @keyframes pulse {
   0% {
     transform: translateX(-50%) scale(1);
@@ -164,7 +152,6 @@ watch(() => props.active, (isActive) => {
   }
 }
 
-/* 定义容器和提示的淡入淡出效果 */
 .splash-fade-enter-active,
 .splash-fade-leave-active {
   transition: opacity 0.5s ease;
