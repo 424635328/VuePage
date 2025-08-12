@@ -11,7 +11,6 @@ import AuroraBackground from './components/AuroraBackground.vue';
 import AppHeader from './components/AppHeader.vue';
 import AppFooter from './components/AppFooter.vue';
 import AppToast from './components/common/AppToast.vue';
-// --- 1. 导入 ConfirmDialog 组件 ---
 import ConfirmDialog from './components/global/ConfirmDialog.vue';
 
 // 初始化 Pinia store 和 Vue Router
@@ -67,8 +66,7 @@ onMounted(() => {
     <!-- 现有的 Toast 通知组件 -->
     <AppToast />
 
-    <!-- --- 2. 在模板的根部添加 ConfirmDialog 组件 --- -->
-    <!-- 将它放在这里可以确保它在所有页面之上显示 -->
+    <!-- ConfirmDialog 组件 -->
     <ConfirmDialog />
   </div>
 </template>
@@ -78,14 +76,21 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  /* 背景色已在 main.scss 的 body 中设置 */
+  /* 背景色通常在全局样式（如 main.scss）的 body 或 html 标签上设置 */
 }
 
 .main-content {
-  flex: 1;
-  width: 100%;
+  /*
+   * 这是实现“粘性页脚”布局的关键。
+   * flex-grow: 1;（或者简写为 flex: 1;）
+   * 它告诉 main 元素占据父容器（.app-container）中所有可用的剩余垂直空间。
+   * 这会将 AppFooter “推”到页面的最底部，无论 main 的内容是多是少。
+  */
+  flex-grow: 1;
+  width: 100%; // 保持宽度为100%
 }
 
+/* 页面切换过渡效果 */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease;
