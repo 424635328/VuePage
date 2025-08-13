@@ -1,4 +1,5 @@
 <!-- src/views/HomePage.vue -->
+ 
 <template>
   <div class="home-page">
     <VideoSplashScreen
@@ -110,7 +111,6 @@ const services = ref([
   { icon: 'bx bx-layer', title: 'UI/UX 策略与设计', description: '打造用户喜爱、直观易用的界面，提升产品价值。' },
   { icon: 'bx bx-code-block', title: 'Web与移动端开发', description: '构建响应迅速、性能卓越、跨平台的应用程序。' },
   { icon: 'bx bx-cloud', title: '云架构与DevOps', description: '提供可扩展、安全可靠的云解决方案与自动化流程。' },
-  { icon: 'bx bx-brain', title: 'AI & 大数据集成', description: '利用前沿技术，从数据中挖掘洞见，赋能智能决策。' }
 ]);
 
 const portfolioItems = ref([

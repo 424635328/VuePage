@@ -4,11 +4,13 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useUiStore } from '@/stores/ui';
 import AuthModal from '@/components/auth/AuthModal.vue';
 import NavIcon from './common/NavIcon.vue';
 
 // --- 核心依赖 ---
 const authStore = useAuthStore();
+const uiStore = useUiStore();
 const route = useRoute();
 
 // --- 响应式状态定义 ---
@@ -128,16 +130,17 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
                 {{ link.text }}
                 <svg class="dropdown-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>
               </button>
-              <transition name="fade-down">
+              <!-- [美化] 修改下拉菜单动画 -->
+              <transition name="dropdown-fade">
                 <div v-if="openDropdownMenu === link.text" class="dropdown-menu">
-                  <ul>
-                    <li v-for="child in link.children" :key="child.to">
+                  <transition-group tag="ul" name="staggered-item-fade" appear>
+                    <li v-for="(child, index) in link.children" :key="child.to" :data-index="index">
                       <RouterLink :to="child.to">
                         <NavIcon :name="child.icon" />
                         <span>{{ child.text }}</span>
                       </RouterLink>
                     </li>
-                  </ul>
+                  </transition-group>
                 </div>
               </transition>
             </div>
@@ -153,6 +156,18 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
         <template v-else>
           <button @click="openAuthModal" class="cta-button">登录 / 注册</button>
         </template>
+
+        <button
+          class="icon-button"
+          @click="uiStore.toggleConfigPanel"
+          aria-label="切换背景配置"
+          title="显示/隐藏背景配置"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311a1.464 1.464 0 0 1-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c-1.4-.413-1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/>
+          </svg>
+        </button>
+
         <button class="hamburger" @click="toggleMobileMenu" :class="{ active: isMobileMenuOpen }" aria-label="切换导航菜单" :aria-expanded="isMobileMenuOpen" aria-controls="mobile-nav-list">
           <span class="bar"></span><span class="bar"></span><span class="bar"></span>
         </button>
@@ -234,7 +249,7 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
   }
 }
 
-// --- 下拉菜单 ---
+// --- 下拉菜单 [美化] ---
 .dropdown-container { position: relative; }
 .dropdown-button {
   display: flex; align-items: center; gap: 0.25rem;
@@ -245,13 +260,38 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
 .dropdown-container:hover .dropdown-button .dropdown-arrow { transform: rotate(180deg); }
 .dropdown-menu {
   position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  margin-top: 0.75rem;
-  background-color: var(--color-background-soft);
+  margin-top: 1rem; /* 增加与按钮的距离 */
+  background-color: rgba(var(--color-background-soft-rgb), 0.7); /* 半透明背景 */
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-  padding: 0.5rem; z-index: 10; width: max-content; min-width: 200px;
-  ul { flex-direction: column; gap: 0.25rem; align-items: flex-start; }
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  padding: 0.5rem; z-index: 10; width: max-content; min-width: 220px;
+
+  /* 小箭头 */
+  &::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid var(--color-border);
+  }
+
+  ul {
+    display: flex;
+    flex-direction: column;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    gap: 0.25rem;
+    align-items: flex-start;
+  }
   li { width: 100%; }
   a {
     display: flex; align-items: center; gap: 0.75rem; width: 100%;
@@ -263,7 +303,7 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
 }
 
 // --- 操作按钮 & 汉堡菜单 ---
-.header-actions { display: flex; align-items: center; gap: 1.25rem; flex-shrink: 0; }
+.header-actions { display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; }
 .cta-button {
   display: inline-block; background-color: var(--color-primary); color: #1a1a1a;
   border: 1px solid transparent; padding: 0.75rem 1.5rem; border-radius: 8px;
@@ -285,6 +325,17 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
   &.active .bar:nth-child(1) { transform: translateY(11px) rotate(45deg); }
   &.active .bar:nth-child(2) { opacity: 0; }
   &.active .bar:nth-child(3) { transform: translateY(-11px) rotate(-45deg); }
+}
+
+.icon-button {
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; padding: 0.6rem; border-radius: 50%;
+  cursor: pointer; color: var(--color-text);
+  transition: color 0.3s ease, background-color 0.3s ease, transform 0.3s ease;
+  &:hover {
+    color: var(--color-heading); background-color: var(--color-background-mute);
+    transform: rotate(45deg);
+  }
 }
 
 // --- 移动端导航 ---
@@ -318,16 +369,40 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
   &.auth-button { background-color: transparent; border: 2px solid var(--color-primary); color: var(--color-primary); }
 }
 
-// --- 过渡动画 ---
+// --- 过渡动画 [美化] ---
 .slide-fade-enter-active { transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1); }
 .slide-fade-leave-active { transition: all 0.3s cubic-bezier(0.755, 0.05, 0.855, 0.06); }
 .slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(-30px); opacity: 0; }
-.fade-down-enter-active, .fade-down-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
-.fade-down-enter-from, .fade-down-leave-to { opacity: 0; transform: translateY(-10px); }
+
+/* 下拉菜单容器动画 */
+.dropdown-fade-enter-active,
+.dropdown-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.dropdown-fade-enter-from,
+.dropdown-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) translateX(-50%);
+}
+/* 下拉菜单项交错动画 */
+.staggered-item-fade-enter-active,
+.staggered-item-fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition-delay: calc(0.04s * var(--data-index, 1));
+}
+.staggered-item-fade-enter-from,
+.staggered-item-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+.staggered-item-fade-leave-active {
+  position: absolute; /* 离开时避免塌陷 */
+}
+
 
 // --- 响应式断点 ---
 @media (max-width: $breakpoint-md) {
-  .desktop-nav, .header-actions .cta-button, .header-actions .auth-button { display: none; }
+  .desktop-nav, .header-actions .cta-button, .header-actions .auth-button, .header-actions .icon-button { display: none; }
   .hamburger { display: flex; }
   .mobile-nav { display: flex; }
 }
