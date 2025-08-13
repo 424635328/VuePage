@@ -23,6 +23,30 @@ const router = createRouter({
       component: HomePage,
     },
     {
+      path: '/help',
+      name: 'help',
+      component: () => import('../views/HelpPage.vue'),
+      meta: { requiresAuth: false }, // 这是一个公开页面
+    },
+    {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('../views/PrivacyPage.vue'),
+      meta: { requiresAuth: false }, // 公开页面
+    },
+    {
+      path: '/terms',
+      name: 'terms',
+      component: () => import('../views/TermsPage.vue'),
+      meta: { requiresAuth: false }, // 公开页面
+    },
+    {
+      path: '/docs',
+      name: 'docs',
+      component: () => import('../views/DocsPage.vue'),
+      meta: { requiresAuth: false }, // 这是一个公开页面
+    },
+    {
       path: '/projects',
       name: 'projects',
       component: () => import('../views/ProjectsPage.vue'),

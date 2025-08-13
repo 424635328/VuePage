@@ -1,7 +1,7 @@
 <!-- src/App.vue -->
 
 <script setup>
-import { onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue'; // 导入 ref 和 onUnmounted
 import { RouterView, useRouter } from 'vue-router';
 import { supabase } from './lib/supabaseClient';
 import { useAuthStore } from './stores/auth';
@@ -12,10 +12,24 @@ import AppHeader from './components/AppHeader.vue';
 import AppFooter from './components/AppFooter.vue';
 import AppToast from './components/common/AppToast.vue';
 import ConfirmDialog from './components/global/ConfirmDialog.vue';
+// --- 1. 导入 AuthModal 组件 ---
+import AuthModal from './components/auth/AuthModal.vue';
 
 // 初始化 Pinia store 和 Vue Router
 const authStore = useAuthStore();
 const router = useRouter();
+
+// --- 2. 添加状态来控制 AuthModal ---
+const isAuthModalActive = ref(false);
+
+// --- 3. 创建事件处理器 ---
+const handleOpenAuthModal = () => {
+  isAuthModalActive.value = true;
+};
+
+const handleCloseAuthModal = () => {
+  isAuthModalActive.value = false;
+};
 
 // onMounted 钩子会在组件挂载后执行，是执行初始化逻辑的最佳位置。
 onMounted(() => {
@@ -35,6 +49,11 @@ onMounted(() => {
     // 任何情况下，都将最新的 session 信息同步到 Pinia store，保持状态一致
     authStore.setSession(session);
 
+    if (event === 'SIGNED_IN') {
+      // 如果用户成功登录，确保模态框关闭
+      handleCloseAuthModal();
+    }
+    
     if (event === 'PASSWORD_RECOVERY') {
       console.log('检测到密码恢复事件，正在重定向到密码更新页面...');
       // 当用户通过邮件链接访问时，Supabase 会触发此事件。
@@ -42,6 +61,15 @@ onMounted(() => {
       router.push({ name: 'update-password' });
     }
   });
+
+  // --- 4. 添加全局事件监听器 ---
+  // 监听由 HelpPage.vue 或任何其他组件派发的 'open-auth-modal' 事件
+  window.addEventListener('open-auth-modal', handleOpenAuthModal);
+});
+
+// --- 5. 在组件卸载时移除监听器，防止内存泄漏 ---
+onUnmounted(() => {
+  window.removeEventListener('open-auth-modal', handleOpenAuthModal);
 });
 </script>
 
@@ -68,6 +96,17 @@ onMounted(() => {
 
     <!-- ConfirmDialog 组件 -->
     <ConfirmDialog />
+
+    <!-- --- 6. 渲染 AuthModal 并绑定状态 --- -->
+    <!-- 
+      - 使用 v-model:active 的语法糖，它等同于 :active="isAuthModalActive" 和 @update:active="isAuthModalActive = $event"
+      - @close="handleCloseAuthModal" 用于处理模态框内部通过 emit('close') 的关闭请求
+    -->
+    <AuthModal 
+      :active="isAuthModalActive"
+      @update:active="isAuthModalActive = $event"
+      @close="handleCloseAuthModal" 
+    />
   </div>
 </template>
 

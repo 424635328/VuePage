@@ -64,7 +64,6 @@ async function handleLogin() {
   });
 
   if (successful) {
-    // 【关键修复】: 先关闭模态框，再执行跳转
     closeModal();
     // 使用 nextTick 确保DOM更新（模态框开始关闭）有机会启动，然后再跳转。
     // 这会让过渡更平滑。
