@@ -1,20 +1,21 @@
 <!-- src/views/ProductDetailsPage.vue -->
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
-import ConfirmModal from '@/components/common/ConfirmModal.vue';
 import { supabase } from '@/lib/supabaseClient';
 
+// 导入新组件和 composable
+import ProductDetailSkeleton from '@/components/common/ProductDetailSkeleton.vue';
+import ConfirmModal from '@/components/common/ConfirmModal.vue';
+import { useLightbox } from '@/composables/useLightbox.js';
+
 const props = defineProps({
-  public_id: {
-    type: String,
-    required: true,
-  },
+  public_id: { type: String, required: true },
 });
 
 const product = ref(null);
@@ -32,10 +33,21 @@ const { user } = storeToRefs(authStore);
 const isConfirmModalOpen = ref(false);
 const isOwner = computed(() => user.value && product.value && user.value.id === product.value.user_id);
 
-// --- ✨ 新增：Lightbox 和图片操作状态 ---
-const isLightboxOpen = ref(false);
-const lightboxImageIndex = ref(0);
-const isDownloading = ref(false);
+// --- 使用 useLightbox Composable ---
+const {
+  isLightboxOpen,
+  activeIndex,
+  currentImage: currentLightboxImage,
+  lightboxRef,
+  open: openLightbox,
+  close: closeLightbox,
+  next: nextImage,
+  prev: prevImage
+} = useLightbox(images);
+
+// --- 操作反馈状态 ---
+const downloadStatus = ref('idle'); // idle, loading, success, error
+const copyStatus = ref('idle'); // idle, success
 
 const contentBlocks = computed(() => {
   if (!product.value?.description) return [];
@@ -54,15 +66,6 @@ const contentBlocks = computed(() => {
   });
   return blocks;
 });
-
-// --- ✨ 新增：计算当前 lightbox 中显示的图片 ---
-const currentLightboxImage = computed(() => {
-  if (!isLightboxOpen.value || !images.value[lightboxImageIndex.value]) {
-    return null;
-  }
-  return images.value[lightboxImageIndex.value];
-});
-
 
 function updateMetaTags(productData, firstImage) {
   document.title = `${productData.name} | MHStudio`;
@@ -102,13 +105,60 @@ async function loadProductData() {
   } catch (e) {
     error.value = e.message;
     toastStore.showToast({ msg: `获取商品详情失败: ${e.message}`, toastType: 'error' });
-    console.error('获取商品详情失败:', e);
   } finally {
-    loading.value = false;
+    // 增加一个短暂延迟，让骨架屏动画更自然
+    setTimeout(() => {
+      loading.value = false;
+    }, 300);
   }
 }
+
 function selectImage(url) {
   currentImage.value = url;
+}
+
+async function handleDownloadImage() {
+  if (!currentImage.value || downloadStatus.value === 'loading') return;
+  downloadStatus.value = 'loading';
+  try {
+    const response = await fetch(currentImage.value);
+    if (!response.ok) throw new Error(`图片请求失败: ${response.statusText}`);
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const fileExtension = blob.type.split('/')[1] || 'jpg';
+    const mainImageIndex = images.value.findIndex(img => img.image_url === currentImage.value);
+    link.download = `${product.value.name}_${mainImageIndex + 1}.${fileExtension}`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    downloadStatus.value = 'success';
+    toastStore.showToast({ msg: '图片已开始下载！' });
+  } catch (err) {
+    downloadStatus.value = 'error';
+    toastStore.showToast({ msg: `下载失败: ${err.message}`, toastType: 'error' });
+  } finally {
+    setTimeout(() => downloadStatus.value = 'idle', 2000);
+  }
+}
+
+async function handleCopyImageUrl() {
+  if (!currentImage.value) return;
+  try {
+    await navigator.clipboard.writeText(currentImage.value);
+    copyStatus.value = 'success';
+    toastStore.showToast({ msg: '图片链接已复制' });
+  } catch (err) {
+    toastStore.showToast({ msg: `复制失败: ${err.message}`, toastType: 'error' });
+  } finally {
+    setTimeout(() => copyStatus.value = 'idle', 2000);
+  }
+}
+
+function handleOpenLightbox() {
+  const index = images.value.findIndex(img => img.image_url === currentImage.value);
+  if (index !== -1) {
+    openLightbox(index);
+  }
 }
 
 function handleEdit() {
@@ -148,96 +198,11 @@ async function shareProduct() {
   }
 }
 
-// --- ✨ 新增：Lightbox 和图片操作函数 ---
-
-function openLightbox(imageUrl) {
-  const index = images.value.findIndex(img => img.image_url === imageUrl);
-  if (index !== -1) {
-    lightboxImageIndex.value = index;
-    isLightboxOpen.value = true;
-    document.body.style.overflow = 'hidden'; // 禁止背景滚动
-  }
-}
-
-function closeLightbox() {
-  isLightboxOpen.value = false;
-  document.body.style.overflow = ''; // 恢复背景滚动
-}
-
-function nextImage() {
-  if (images.value.length < 2) return;
-  lightboxImageIndex.value = (lightboxImageIndex.value + 1) % images.value.length;
-}
-
-function prevImage() {
-  if (images.value.length < 2) return;
-  lightboxImageIndex.value = (lightboxImageIndex.value - 1 + images.value.length) % images.value.length;
-}
-
-async function handleDownloadImage() {
-  if (!currentImage.value || isDownloading.value) return;
-  isDownloading.value = true;
-  toastStore.showToast({ msg: '正在准备下载...', toastType: 'info' });
-
-  try {
-    const response = await fetch(currentImage.value);
-    if (!response.ok) throw new Error(`图片请求失败: ${response.statusText}`);
-
-    const blob = await response.blob();
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-
-    const fileExtension = blob.type.split('/')[1] || 'jpg';
-    const mainImageIndex = images.value.findIndex(img => img.image_url === currentImage.value);
-    link.download = `${product.value.name}_${mainImageIndex + 1}.${fileExtension}`;
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    URL.revokeObjectURL(link.href);
-    toastStore.showToast({ msg: '图片已开始下载！' });
-  } catch (err) {
-    console.error('Download failed:', err);
-    toastStore.showToast({ msg: `下载失败: ${err.message}`, toastType: 'error' });
-  } finally {
-    isDownloading.value = false;
-  }
-}
-
-async function handleCopyImageUrl() {
-  if (!currentImage.value) return;
-  try {
-    await navigator.clipboard.writeText(currentImage.value);
-    toastStore.showToast({ msg: '图片链接已复制' });
-  } catch (err) {
-    console.error('Copy URL failed:', err);
-    toastStore.showToast({ msg: '复制失败', toastType: 'error' });
-  }
-}
-
-// --- ✨ 新增：监听键盘事件以控制 Lightbox ---
-watch(isLightboxOpen, (isOpen) => {
-  const handleKeydown = (e) => {
-    if (!isLightboxOpen.value) return;
-    if (e.key === 'Escape') closeLightbox();
-    if (e.key === 'ArrowRight') nextImage();
-    if (e.key === 'ArrowLeft') prevImage();
-  };
-
-  if (isOpen) {
-    window.addEventListener('keydown', handleKeydown);
-  } else {
-    window.removeEventListener('keydown', handleKeydown);
-  }
-});
-
-
 onMounted(loadProductData);
 
 onUnmounted(() => {
   productsStore.selectProductForDetailPage(null);
-  document.body.style.overflow = ''; // 确保组件卸载时恢复滚动
+  document.body.style.overflow = '';
 });
 
 const formattedDate = (d) => d ? new Date(d).toLocaleString('zh-CN', { dateStyle: 'long', timeStyle: 'short' }) : 'N/A';
@@ -247,10 +212,8 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
 
 <template>
   <div class="details-page">
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>正在加载商品详情...</p>
-    </div>
+    <!-- 1. 使用骨架屏 -->
+    <ProductDetailSkeleton v-if="loading" />
 
     <div v-else-if="error || !product" class="error-state">
       <h2>无法找到商品</h2>
@@ -259,7 +222,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
     </div>
 
     <div v-else class="container">
-      <!-- ... owner-toolbar and back-button ... (no changes here) -->
       <div v-if="isOwner" class="owner-toolbar">
         <span class="toolbar-label">所有者工具</span>
         <div class="toolbar-actions">
@@ -279,31 +241,37 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
 
       <div class="details-layout">
         <aside v-if="images.length > 0" class="gallery-column fade-in-item">
-
-          <!-- ✨ 升级：主图区域，添加操作按钮和点击放大功能 -->
           <div class="main-image-wrapper">
+            <!-- 2. 即时反馈按钮 -->
             <div class="image-actions">
-              <button @click.stop="handleDownloadImage" class="action-btn" :disabled="isDownloading" title="下载图片">
-                <svg v-if="isDownloading" class="spinner-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+               <button @click.stop="handleDownloadImage" class="action-btn" :class="`status-${downloadStatus}`" :disabled="downloadStatus === 'loading'" title="下载图片">
+                  <Transition name="feedback-icon" mode="out-in">
+                    <svg v-if="downloadStatus === 'idle'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <svg v-else-if="downloadStatus === 'loading'" class="spinner-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+                    <svg v-else-if="downloadStatus === 'success'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <svg v-else-if="downloadStatus === 'error'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </Transition>
               </button>
-              <button @click.stop="handleCopyImageUrl" class="action-btn" title="复制图片链接">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+               <button @click.stop="handleCopyImageUrl" class="action-btn" :class="`status-${copyStatus}`" title="复制图片链接">
+                  <Transition name="feedback-icon" mode="out-in">
+                    <svg v-if="copyStatus === 'idle'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    <svg v-else-if="copyStatus === 'success'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </Transition>
               </button>
             </div>
-            <img :src="currentImage" :alt="product.name" class="main-image" @click="openLightbox(currentImage)" />
+            <img :src="currentImage" :alt="product.name" class="main-image" @click="handleOpenLightbox" />
           </div>
 
           <div v-if="images.length > 1" class="thumbnail-grid">
             <img v-for="img in images" :key="img.id" :src="img.image_url"
-                 :alt="`${product.name} thumbnail ${img.id}`"
+                 :alt="`${product.name} - 查看 ${img.position + 1}`"
                  class="thumbnail-image"
                  :class="{ active: currentImage === img.image_url }"
-                 @click="selectImage(img.image_url)" />
+                 @click="selectImage(img.image_url)"
+                 loading="lazy" /> <!-- 3. 缩略图懒加载 -->
           </div>
         </aside>
 
-        <!-- ... content-column ... (no changes here) -->
         <article class="content-column">
           <header class="article-header fade-in-item">
             <h1 class="product-title">{{ product.name }}</h1>
@@ -329,7 +297,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
       </div>
     </div>
 
-    <!-- ... ConfirmModal ... (no changes here) -->
     <ConfirmModal
       :show="isConfirmModalOpen"
       title="确认删除商品"
@@ -339,29 +306,36 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
       @confirm="confirmDeletion"
     />
 
-    <!-- ✨ 新增：图片查看器 (Lightbox) -->
+    <!-- 4. A11y 优化的 Lightbox -->
     <Transition name="lightbox-fade">
-      <div v-if="isLightboxOpen" class="lightbox-backdrop" @click="closeLightbox">
-        <button class="lightbox-close-btn" @click.stop="closeLightbox" title="关闭 (Esc)">
+      <div v-if="isLightboxOpen"
+           class="lightbox-backdrop"
+           @click="closeLightbox"
+           ref="lightboxRef"
+           role="dialog"
+           aria-modal="true"
+           :aria-label="`${product.name} - 图片浏览器`">
+
+        <button @click.stop="closeLightbox" class="lightbox-close-btn" aria-label="关闭图片浏览器 (Esc)">
           <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
 
-        <button v-if="images.length > 1" class="lightbox-nav-btn prev" @click.stop="prevImage" title="上一张 (←)">
+        <button v-if="images.length > 1" @click.stop="prevImage" class="lightbox-nav-btn prev" aria-label="上一张图片 (左箭头)">
           <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
 
         <div class="lightbox-content" @click.stop>
           <Transition name="lightbox-image-fade" mode="out-in">
-            <img v-if="currentLightboxImage" :key="currentLightboxImage.id" :src="currentLightboxImage.image_url" :alt="product.name" class="lightbox-image" />
+            <img v-if="currentLightboxImage" :key="currentLightboxImage.id" :src="currentLightboxImage.image_url" :alt="`${product.name} - 图片 ${activeIndex + 1}`" class="lightbox-image" />
           </Transition>
         </div>
 
-        <button v-if="images.length > 1" class="lightbox-nav-btn next" @click.stop="nextImage" title="下一张 (→)">
+        <button v-if="images.length > 1" @click.stop="nextImage" class="lightbox-nav-btn next" aria-label="下一张图片 (右箭头)">
           <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </button>
 
-        <div v-if="images.length > 1" class="lightbox-counter">
-          {{ lightboxImageIndex + 1 }} / {{ images.length }}
+        <div v-if="images.length > 1" class="lightbox-counter" aria-live="polite" aria-atomic="true">
+          {{ activeIndex + 1 }} / {{ images.length }}
         </div>
       </div>
     </Transition>
@@ -382,108 +356,23 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   animation: fadeIn 0.6s ease-out forwards;
 }
 
-// ... existing .details-page, .container, .details-layout, .content-column, etc. ...
 .details-page {
   padding: 2rem 0 6rem;
 }
+
 .container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 2rem;
 }
+
 .details-layout {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
   gap: 3rem;
 }
-.content-column {
-  flex: 1;
-  min-width: 0;
-}
-.owner-toolbar {
-  position: sticky;
-  top: $header-height;
-  z-index: 100;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(30, 41, 59, 0.8);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 0.75rem 1.5rem;
-  margin-bottom: 2rem;
-  animation: fadeIn 0.5s ease-out;
-  .toolbar-label { font-size: 0.9rem; font-weight: 600; color: var(--color-primary); }
-  .toolbar-actions { display: flex; gap: 0.5rem; }
-  .toolbar-button {
-    display: flex; align-items: center; gap: 0.5rem; background: transparent; border: 1px solid var(--color-border);
-    color: var(--color-text); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s ease;
-    &:hover { background: var(--color-background-soft); color: var(--color-heading); }
-    &.delete:hover { background: rgba(229, 62, 62, 0.1); border-color: #e53e3e; color: #e53e3e; }
-  }
-}
-.back-button-wrapper {
-  margin-bottom: 2rem;
-}
-.back-button {
-  background: none; border: 1px solid var(--color-border); color: var(--color-text); padding: 0.5rem 1rem;
-  border-radius: 8px; cursor: pointer; transition: all 0.2s;
-  &:hover { background: var(--color-background-soft); color: var(--color-heading); }
-}
-.article-header {
-  margin-bottom: 3rem;
-}
-.product-title {
-  font-size: 3rem; font-weight: 700; color: var(--color-heading);
-  line-height: 1.2; margin-bottom: 1.5rem;
-}
-.meta-info {
-  font-size: 0.9rem; color: var(--color-text-dark); display: inline-block;
-  padding: 0.75rem 1.5rem; border-radius: 8px; border: 1px solid var(--color-border);
-  background: var(--color-background-soft);
-  p { margin: 0 0 0.25rem; &:last-child { margin-bottom: 0; } }
-}
-.article-body { }
-.content-block {
-  margin-bottom: 3rem;
-  .block-title {
-    font-size: 1.8rem; font-weight: 600; color: var(--color-heading); margin-bottom: 1.5rem;
-    padding-bottom: 0.75rem; border-bottom: 1px solid var(--color-border); position: relative;
-    &::before { content: ''; position: absolute; bottom: -1px; left: 0; width: 50px; height: 2px; background-color: var(--color-primary); }
-  }
-  .block-content {
-    font-size: 1.15rem;
-    line-height: 2;
-    color: var(--color-text-dark);
-    white-space: pre-wrap;
-  }
-}
-.article-footer {
-  text-align: center; margin-top: 4rem; padding-top: 2rem;
-  border-top: 1px solid var(--color-border);
-}
-.cta-button {
-  padding: 0.8rem 2rem; font-size: 1rem; font-weight: 600; border-radius: 8px; border: none;
-  cursor: pointer; transition: all 0.2s ease; background-color: var(--color-primary); color: #1a1a1a;
-  &:hover { transform: translateY(-2px); }
-}
-.loading-state, .error-state {
-  display: flex; flex-direction: column; justify-content: center; align-items: center;
-  min-height: 60vh; text-align: center;
-  h2 { font-size: 1.8rem; color: var(--color-heading); margin-bottom: 1rem; }
-  p { font-size: 1.1rem; color: var(--color-text-dark); max-width: 450px; }
-  .spinner {
-    width: 50px; height: 50px; border: 4px solid var(--color-border); border-top-color: var(--color-primary);
-    border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1.5rem;
-  }
-  .cta-button { margin-top: 1.5rem; }
-}
 
-
-// --- ✨ 升级：Gallery 样式 ---
 .gallery-column {
   flex: 0 0 40%;
   max-width: 500px;
@@ -532,6 +421,8 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
     border: 2px solid transparent;
     cursor: pointer;
     transition: all 0.2s ease;
+    background-color: var(--color-background-soft); // 懒加载占位符背景
+
     &:hover {
       border-color: var(--color-primary-light);
     }
@@ -542,7 +433,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   }
 }
 
-// --- ✨ 新增：图片操作按钮样式 ---
 .image-actions {
   position: absolute;
   top: 1rem;
@@ -567,7 +457,7 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
     border-radius: 50%;
     color: white;
     cursor: pointer;
-    transition: background-color 0.2s ease, transform 0.2s ease;
+    transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
 
     &:hover:not(:disabled) {
       background-color: rgba(0, 0, 0, 0.8);
@@ -580,10 +470,123 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
     .spinner-icon {
       animation: spin 1s linear infinite;
     }
+
+    &.status-success {
+      background-color: #28a745;
+      border-color: #28a745;
+    }
+    &.status-error {
+      background-color: #dc3545;
+      border-color: #dc3545;
+    }
   }
 }
 
-// --- ✨ 新增：Lightbox (图片查看器) 样式 ---
+.feedback-icon-enter-active,
+.feedback-icon-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.feedback-icon-enter-from {
+  opacity: 0;
+  transform: scale(0.5);
+}
+.feedback-icon-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+.content-column {
+  flex: 1;
+  min-width: 0;
+}
+
+.owner-toolbar {
+  position: sticky;
+  top: $header-height;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  margin-bottom: 2rem;
+  animation: fadeIn 0.5s ease-out;
+  .toolbar-label { font-size: 0.9rem; font-weight: 600; color: var(--color-primary); }
+  .toolbar-actions { display: flex; gap: 0.5rem; }
+  .toolbar-button {
+    display: flex; align-items: center; gap: 0.5rem; background: transparent; border: 1px solid var(--color-border);
+    color: var(--color-text); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s ease;
+    &:hover { background: var(--color-background-soft); color: var(--color-heading); }
+    &.delete:hover { background: rgba(229, 62, 62, 0.1); border-color: #e53e3e; color: #e53e3e; }
+  }
+}
+
+.back-button-wrapper {
+  margin-bottom: 2rem;
+}
+
+.back-button {
+  background: none; border: 1px solid var(--color-border); color: var(--color-text); padding: 0.5rem 1rem;
+  border-radius: 8px; cursor: pointer; transition: all 0.2s;
+  &:hover { background: var(--color-background-soft); color: var(--color-heading); }
+}
+
+.article-header {
+  margin-bottom: 3rem;
+}
+
+.product-title {
+  font-size: 3rem; font-weight: 700; color: var(--color-heading);
+  line-height: 1.2; margin-bottom: 1.5rem;
+}
+
+.meta-info {
+  font-size: 0.9rem; color: var(--color-text-dark); display: inline-block;
+  padding: 0.75rem 1.5rem; border-radius: 8px; border: 1px solid var(--color-border);
+  background: var(--color-background-soft);
+  p { margin: 0 0 0.25rem; &:last-child { margin-bottom: 0; } }
+}
+
+.article-body { }
+
+.content-block {
+  margin-bottom: 3rem;
+  .block-title {
+    font-size: 1.8rem; font-weight: 600; color: var(--color-heading); margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem; border-bottom: 1px solid var(--color-border); position: relative;
+    &::before { content: ''; position: absolute; bottom: -1px; left: 0; width: 50px; height: 2px; background-color: var(--color-primary); }
+  }
+  .block-content {
+    font-size: 1.15rem;
+    line-height: 2;
+    color: var(--color-text-dark);
+    white-space: pre-wrap;
+  }
+}
+
+.article-footer {
+  text-align: center; margin-top: 4rem; padding-top: 2rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.cta-button {
+  padding: 0.8rem 2rem; font-size: 1rem; font-weight: 600; border-radius: 8px; border: none;
+  cursor: pointer; transition: all 0.2s ease; background-color: var(--color-primary); color: #1a1a1a;
+  &:hover { transform: translateY(-2px); }
+}
+
+.error-state {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  min-height: 60vh; text-align: center;
+  h2 { font-size: 1.8rem; color: var(--color-heading); margin-bottom: 1rem; }
+  p { font-size: 1.1rem; color: var(--color-text-dark); max-width: 450px; }
+  .cta-button { margin-top: 1.5rem; }
+}
+
 .lightbox-backdrop {
   position: fixed;
   top: 0;
@@ -674,7 +677,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   user-select: none;
 }
 
-// --- ✨ 新增：Lightbox 过渡动画 ---
 .lightbox-fade-enter-active,
 .lightbox-fade-leave-active {
   transition: opacity 0.3s ease;
@@ -696,8 +698,6 @@ const lastUpdated = computed(() => product.value ? formattedDate(product.value.u
   opacity: 0;
 }
 
-
-// --- 响应式调整 ---
 @media (max-width: 992px) {
   .details-layout {
     flex-direction: column;
