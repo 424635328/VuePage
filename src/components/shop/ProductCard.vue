@@ -4,7 +4,7 @@ import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useProductsStore } from '@/stores/products';
 
-// ✨ 1. Props 升级：增加 loading 状态，并使 product 可选，以支持骨架屏
+//  1. Props 升级：增加 loading 状态，并使 product 可选，以支持骨架屏
 const props = defineProps({
   product: {
     type: Object,
@@ -24,7 +24,7 @@ function prepareForNavigation() {
   }
 }
 
-// ✨ 2. 日期计算升级：使用 Intl.RelativeTimeFormat 提供更友好的相对时间
+//  2. 日期计算升级：使用 Intl.RelativeTimeFormat 提供更友好的相对时间
 const lastActivity = computed(() => {
   if (props.loading || !props.product) return { text: '', isRecent: false };
 
@@ -67,7 +67,7 @@ const activityPrefix = computed(() => {
 </script>
 
 <template>
-  <!-- ✨ 3. 骨架屏加载状态 -->
+  <!--  3. 骨架屏加载状态 -->
   <div v-if="loading" class="product-card-wrapper is-loading">
     <div class="skeleton skeleton-image"></div>
     <div class="card-content">
@@ -96,14 +96,14 @@ const activityPrefix = computed(() => {
           loading="lazy"
           @error.once="(e) => (e.target.src = '/placeholder.svg')"
         />
-        <!-- ✨ 4. 动态状态徽章，仅在近期活动时显示 -->
+        <!--  4. 动态状态徽章，仅在近期活动时显示 -->
         <span v-if="lastActivity.isRecent" class="status-badge">
           {{ product.updated_at ? '最新更新' : '新品' }}
         </span>
       </div>
       <div class="card-content">
         <h3 class="product-title">{{ product.name || '无标题商品' }}</h3>
-        <!-- ✨ 5. 优雅处理空描述，避免渲染空 p 标签 -->
+        <!--  5. 优雅处理空描述，避免渲染空 p 标签 -->
         <p v-if="product.description" class="product-description">{{ product.description }}</p>
         <div class="card-footer">
           <div class="product-date">
@@ -134,13 +134,13 @@ const activityPrefix = computed(() => {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   overflow: hidden;
-  // ✨ 6. 优化过渡效果，增加边框颜色过渡
+  //  6. 优化过渡效果，增加边框颜色过渡
   transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
 
   &:hover {
     transform: translateY(-6px);
     box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
-    border-color: var(--color-primary); // ✨ 悬停时边框高亮
+    border-color: var(--color-primary); //  悬停时边框高亮
   }
 }
 
@@ -160,7 +160,7 @@ const activityPrefix = computed(() => {
   overflow: hidden;
 }
 
-// ✨ 7. 状态徽章样式
+// 7. 状态徽章样式
 .status-badge {
     position: absolute;
     top: 1rem;
@@ -278,7 +278,7 @@ const activityPrefix = computed(() => {
   }
 }
 
-// ✨ 8. 骨架屏样式
+// 8. 骨架屏样式
 @keyframes shimmer {
   100% { transform: translateX(100%); }
 }
