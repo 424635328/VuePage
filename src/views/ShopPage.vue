@@ -220,8 +220,9 @@ async function handleCopyLink(product) {
           <div class="products-grid">
             <ProductCard v-for="product in products" :key="product.id" :product="product">
               <template #actions>
-                <button @click.stop.prevent="handleEditProduct(product)" class="action-btn">编辑</button>
-                <button @click.stop.prevent="handleCopyLink(product)" class="action-btn">复制链接</button>
+                <!-- ✨ 唯一修改：为按钮添加 class -->
+                <button @click.stop.prevent="handleEditProduct(product)" class="action-btn edit-btn">编辑</button>
+                <button @click.stop.prevent="handleCopyLink(product)" class="action-btn copy-btn">复制链接</button>
                 <button @click.stop.prevent="handleDeleteProduct(product)" class="action-btn delete-btn">删除</button>
               </template>
             </ProductCard>

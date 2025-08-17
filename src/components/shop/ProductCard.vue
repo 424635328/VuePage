@@ -1,14 +1,14 @@
-<!-- src/components/ProductCard.vue -->
+<!-- src/components/shop/ProductCard.vue -->
+
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useProductsStore } from '@/stores/products';
 
-//  1. Props 升级：增加 loading 状态，并使 product 可选，以支持骨架屏
 const props = defineProps({
   product: {
     type: Object,
-    default: null, // 默认值为 null，以便在加载时传递
+    default: null,
   },
   loading: {
     type: Boolean,
@@ -18,30 +18,41 @@ const props = defineProps({
 
 const productsStore = useProductsStore();
 
+// 图片加载状态，用于实现平滑的淡入效果
+const isImageLoaded = ref(false);
+
+// 当 product prop 变化时 (例如，在同一个路由视图中切换)，重置图片加载状态
+watch(() => props.product?.thumbnail_url, () => {
+  isImageLoaded.value = false;
+});
+
+
 function prepareForNavigation() {
   if (props.product) {
     productsStore.selectProductForDetailPage(props.product);
   }
 }
 
-//  2. 日期计算升级：使用 Intl.RelativeTimeFormat 提供更友好的相对时间
+// 日期计算升级：使用 Intl.RelativeTimeFormat 提供更友好的相对时间
 const lastActivity = computed(() => {
   if (props.loading || !props.product) return { text: '', isRecent: false };
 
-  // 优先使用更新时间，否则使用创建时间
-  const date = new Date(props.product.updated_at || props.product.created_at);
+  const dateString = props.product.updated_at || props.product.created_at;
+  // 增加对无效日期的健壮性处理
+  if (!dateString) return { text: '未知日期', isRecent: false };
+
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return { text: '无效日期', isRecent: false };
+
   const now = new Date();
   const diffSeconds = Math.round((now - date) / 1000);
   const diffDays = diffSeconds / (60 * 60 * 24);
 
   // 如果在3天内有活动，标记为 "近期"，用于显示徽章
   const isRecent = diffDays < 3;
-
-  // 使用国际化 API 生成 "X天前", "Y小时前" 等文本
   const rtf = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' });
 
   if (diffDays >= 7) {
-    // 超过一周，直接显示具体日期，更清晰
     return {
       text: date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' }),
       isRecent: false,
@@ -62,12 +73,18 @@ const lastActivity = computed(() => {
 // 计算是“更新于”还是“添加于”，使文本更精确
 const activityPrefix = computed(() => {
     if(props.loading || !props.product) return '';
-    return props.product.updated_at ? '更新于' : '添加于';
+    // 如果更新时间和创建时间非常接近（例如在1分钟内），也认为是“添加于”
+    const updatedAt = new Date(props.product.updated_at);
+    const createdAt = new Date(props.product.created_at);
+    if (props.product.updated_at && (updatedAt - createdAt > 60000)) {
+        return '更新于';
+    }
+    return '添加于';
 });
 </script>
 
 <template>
-  <!--  3. 骨架屏加载状态 -->
+  <!-- 骨架屏加载状态 -->
   <div v-if="loading" class="product-card-wrapper is-loading">
     <div class="skeleton skeleton-image"></div>
     <div class="card-content">
@@ -93,21 +110,24 @@ const activityPrefix = computed(() => {
           :src="product.thumbnail_url || '/placeholder.svg'"
           :alt="product.name || '商品图片'"
           class="product-image"
+          :class="{ 'is-loaded': isImageLoaded }"
           loading="lazy"
+          @load="isImageLoaded = true"
           @error.once="(e) => (e.target.src = '/placeholder.svg')"
         />
-        <!--  4. 动态状态徽章，仅在近期活动时显示 -->
+        <!-- 动态状态徽章，仅在近期活动时显示 -->
         <span v-if="lastActivity.isRecent" class="status-badge">
           {{ product.updated_at ? '最新更新' : '新品' }}
         </span>
       </div>
       <div class="card-content">
         <h3 class="product-title">{{ product.name || '无标题商品' }}</h3>
-        <!--  5. 优雅处理空描述，避免渲染空 p 标签 -->
+        <!-- 优雅处理空描述，避免渲染空 p 标签 -->
         <p v-if="product.description" class="product-description">{{ product.description }}</p>
         <div class="card-footer">
           <div class="product-date">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <!-- 为装饰性图标添加 aria-hidden，提升屏幕阅读器体验 -->
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             <span>{{ activityPrefix }} {{ lastActivity.text }}</span>
           </div>
         </div>
@@ -117,7 +137,9 @@ const activityPrefix = computed(() => {
     <div class="card-actions">
       <slot name="actions">
         <div class="card-actions-visual">
-          <span>查看详情 &rarr;</span>
+          <span>查看详情</span>
+          <!-- 增加一个动画箭头，提供更强的交互指引 -->
+          <span class="arrow">&rarr;</span>
         </div>
       </slot>
     </div>
@@ -134,13 +156,18 @@ const activityPrefix = computed(() => {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   overflow: hidden;
-  //  6. 优化过渡效果，增加边框颜色过渡
   transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
 
-  &:hover {
+  // 增加 :focus-visible 状态，提升键盘导航的可访问性
+  &:hover,
+  .card-link:focus-visible {
     transform: translateY(-6px);
     box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
-    border-color: var(--color-primary); //  悬停时边框高亮
+    border-color: var(--color-primary);
+  }
+
+  .card-link:focus-visible {
+    outline: none; // 移除默认的 outline，因为我们用 border-color 提供了反馈
   }
 }
 
@@ -153,14 +180,14 @@ const activityPrefix = computed(() => {
 }
 
 .card-image-wrapper {
-  position: relative; // 为徽章定位
+  position: relative;
   width: 100%;
-  height: 200px;
+  // 使用 aspect-ratio 替代固定高度，响应式更好且防止布局抖动
+  aspect-ratio: 16 / 9;
   background-color: var(--color-background-mute);
   overflow: hidden;
 }
 
-// 7. 状态徽章样式
 .status-badge {
     position: absolute;
     top: 1rem;
@@ -173,6 +200,7 @@ const activityPrefix = computed(() => {
     font-weight: 700;
     border-radius: 20px;
     animation: fadeInBadge 0.5s ease;
+    z-index: 1; // 确保在图片之上
 }
 
 @keyframes fadeInBadge {
@@ -184,7 +212,15 @@ const activityPrefix = computed(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+  // 为图片加载添加平滑过渡效果
+  opacity: 0;
+  transform: scale(1.05);
+  transition: opacity 0.4s ease-out, transform 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+
+  &.is-loaded {
+    opacity: 1;
+    transform: scale(1);
+  }
 
   .product-card-wrapper:hover & {
     transform: scale(1.05);
@@ -203,7 +239,6 @@ const activityPrefix = computed(() => {
   font-weight: 600;
   color: var(--color-heading);
   margin: 0 0 0.75rem;
-  // 优化长标题显示
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -214,16 +249,14 @@ const activityPrefix = computed(() => {
   color: var(--color-text);
   line-height: 1.6;
   margin: 0;
-  flex-grow: 1; // 确保描述区域能填满剩余空间
+  flex-grow: 1;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: calc(1.6em * 3); // 保证至少有3行的高度
 }
 
 .card-footer {
-  // 将日期推到底部
   margin-top: 1.5rem;
 }
 
@@ -250,6 +283,20 @@ const activityPrefix = computed(() => {
     text-align: center;
     font-weight: 500;
     color: var(--color-primary);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+
+    .arrow {
+      // 设置箭头的过渡效果，为微交互做准备
+      transition: transform 0.3s ease;
+    }
+  }
+
+  // 当卡片悬停时，触发箭头动画
+  .product-card-wrapper:hover & .arrow {
+    transform: translateX(5px);
   }
 
   :slotted(.action-btn) {
@@ -266,19 +313,31 @@ const activityPrefix = computed(() => {
       border-right: 1px solid var(--color-border);
     }
 
-    &:hover {
+    &:hover, &:focus-visible {
       background-color: rgba(255, 255, 255, 0.05);
       color: var(--color-heading);
+      outline: none;
     }
 
-    &.delete-btn:hover {
-      background-color: #e53e3e;
+    // 为编辑和复制按钮添加绿色悬停效果
+    &.edit-btn:hover,
+    &.edit-btn:focus-visible,
+    &.copy-btn:hover,
+    &.copy-btn:focus-visible {
+      background-color: #38a169; // 绿色
+      color: #fff;
+    }
+
+    // 为删除按钮添加红色悬停效果
+    &.delete-btn:hover,
+    &.delete-btn:focus-visible {
+      background-color: #e53e3e; // 红色
       color: #fff;
     }
   }
 }
 
-// 8. 骨架屏样式
+// 骨架屏样式
 @keyframes shimmer {
   100% { transform: translateX(100%); }
 }
@@ -302,10 +361,10 @@ const activityPrefix = computed(() => {
       animation: shimmer 1.5s infinite;
     }
   }
-  .skeleton-image { height: 200px; border-radius: 0; }
+  .skeleton-image { aspect-ratio: 16 / 10; height: auto; border-radius: 0; }
   .skeleton-title { width: 70%; height: 1.5rem; margin-bottom: 1rem; }
   .skeleton-text { width: 100%; height: 1rem; margin-bottom: 0.5rem; }
-  .skeleton-date { width: 40%; height: 1rem; margin-top: auto; } // 确保日期在底部
+  .skeleton-date { width: 40%; height: 1rem; margin-top: auto; }
   .card-content { flex-grow: 1; display: flex; flex-direction: column; }
   .card-actions { border-top-color: transparent; }
   .skeleton-actions { width: 100%; height: 50px; border-radius: 0; }
