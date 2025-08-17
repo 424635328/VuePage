@@ -1,9 +1,10 @@
 <!-- src/views/ShopPage.vue -->
 
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
+import { supabase } from '@/lib/supabaseClient';
 import { useAuthStore } from '@/stores/auth';
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
@@ -18,7 +19,6 @@ const authStore = useAuthStore();
 const { user, loading: authLoading } = storeToRefs(authStore);
 
 const productsStore = useProductsStore();
-// 从 store 中获取所有需要的 state，包括分页相关的
 const { products, loading: productsLoading, error, hasMore, loadingMore } = storeToRefs(productsStore);
 
 const toastStore = useToastStore();
@@ -29,43 +29,102 @@ const isAuthModalOpen = ref(false);
 const isConfirmModalOpen = ref(false);
 const productToDelete = ref(null);
 
-// 核心数据加载逻辑：只在 user 状态变化时触发
+const loadedProductsCount = computed(() => products.value.length);
+
+let realtimeChannel = null;
+
 watch(user, (newUser, oldUser) => {
   if (newUser && !oldUser) { // 登录成功
     isAuthModalOpen.value = false;
     productsStore.fetchInitialProducts();
+    setupRealtimeSubscription(newUser.id);
   } else if (!newUser && oldUser) { // 登出
     productsStore.clearProducts();
+    removeRealtimeSubscription();
   }
 });
 
-// onMounted 只处理页面刷新时用户已登录的情况
 onMounted(() => {
-  // 如果用户已登录，但商品列表为空（可能是在当前页面刷新）
   if (user.value && products.value.length === 0) {
     productsStore.fetchInitialProducts();
   }
+  if (user.value) {
+    setupRealtimeSubscription(user.value.id);
+  }
 });
 
-// --- 无限滚动逻辑 ---
-const loadMoreTrigger = ref(null); // 这是我们将要观察的元素
+onUnmounted(() => {
+  removeRealtimeSubscription();
+});
+
+function setupRealtimeSubscription(userId) {
+  if (realtimeChannel) return;
+
+  realtimeChannel = supabase
+    .channel(`public:products:user_id=eq.${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'products',
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) => {
+        console.log('Realtime event received:', payload);
+        switch (payload.eventType) {
+          case 'INSERT': { // ✨ 修复：为 case 添加块级作用域
+            // 新增商品，添加到列表最前面
+            products.value.unshift(payload.new);
+            toastStore.showToast({ msg: `已同步新商品: ${payload.new.name}`, toastType: 'info' });
+            break;
+          }
+          case 'UPDATE': { // ✨ 修复：为 case 添加块级作用域
+            // 更新商品
+            const index = products.value.findIndex(p => p.id === payload.new.id);
+            if (index !== -1) {
+              products.value[index] = payload.new;
+            }
+            break;
+          }
+          case 'DELETE': { // ✨ 修复：为 case 添加块级作用域
+            // 删除商品
+            const deletedIndex = products.value.findIndex(p => p.id === payload.old.id);
+            if (deletedIndex !== -1) {
+              // 为了获取商品名称，我们从旧数据中读取
+              const deletedProductName = payload.old.name || '一个商品';
+              products.value.splice(deletedIndex, 1);
+              toastStore.showToast({ msg: `商品 ‘${deletedProductName}’ 已被删除`, toastType: 'info' });
+            }
+            break;
+          }
+        }
+      }
+    )
+    .subscribe();
+}
+
+function removeRealtimeSubscription() {
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+}
+
+const loadMoreTrigger = ref(null);
 
 useIntersectionObserver(
   loadMoreTrigger,
   ([{ isIntersecting }]) => {
-    // 当触发元素进入视口，并且有更多数据、不在加载中、且用户已登录时
     if (isIntersecting && hasMore.value && !loadingMore.value && user.value) {
       productsStore.fetchMoreProducts();
     }
   },
   {
-    rootMargin: '300px', // 距离底部 300px 时就开始预加载
+    rootMargin: '300px',
   }
 );
 
-// --- 事件处理函数 ---
-
-// AuthModal 的 @loggedIn 事件现在不再需要做任何事，因为 watcher 会处理
 function onLoggedIn() {}
 
 function handleAddProduct() {
@@ -73,7 +132,6 @@ function handleAddProduct() {
 }
 
 function handleEditProduct(product) {
-  // 导航前将数据暂存到 store，实现详情页瞬时加载
   productsStore.selectProductForDetailPage(product);
   router.push({ name: 'product-edit', params: { public_id: product.public_id } });
 }
@@ -110,6 +168,15 @@ async function handleCopyLink(product) {
         <h1>On Sale</h1>
         <p v-if="user" class="fade-in">欢迎回来, <strong>{{ user.email }}</strong></p>
         <p v-else class="fade-in">创建、管理和分享您的专属数字产品</p>
+
+        <div v-if="user && !productsLoading" class="stats-bar fade-in">
+          <span>当前显示: <strong>{{ loadedProductsCount }}</strong> 件商品</span>
+          <span class="live-indicator">
+            <span class="dot"></span>
+            实时同步中
+          </span>
+        </div>
+
       </header>
 
       <!-- Unauthenticated Prompt -->
@@ -198,6 +265,14 @@ async function handleCopyLink(product) {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
 .fade-in { animation: fadeIn 0.5s ease-out forwards; }
 
 // --- Page & Header Styles ---
@@ -227,6 +302,56 @@ async function handleCopyLink(product) {
     color: var(--color-text-dark);
     max-width: 600px;
     margin: 0 auto;
+  }
+}
+
+.stats-bar {
+  margin-top: 2rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 12px;
+  color: var(--color-text-dark);
+  font-size: 0.95rem;
+
+  strong {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+}
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  .dot {
+    position: relative;
+    display: flex;
+    width: 0.75rem;
+    height: 0.75rem;
+
+    &::before { // The solid dot
+      content: '';
+      position: relative;
+      display: inline-block;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background-color: #2dd4bf;
+    }
+
+    &::after { // The ping animation
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background-color: #2dd4bf;
+      animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
   }
 }
 
@@ -296,7 +421,6 @@ async function handleCopyLink(product) {
   border-top-color: var(--color-primary); border-radius: 50%;
   animation: spin 1s linear infinite; margin-bottom: 1.5rem;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
 
 // --- Products Grid Styles ---
 .products-grid {
@@ -313,13 +437,12 @@ async function handleCopyLink(product) {
   justify-content: center;
   align-items: center;
   padding: 4rem 0;
-  min-height: 120px; // 给予足够的高度，以便 useIntersectionObserver 能够可靠地触发
+  min-height: 120px;
 
   p {
     color: var(--color-text-dark);
   }
 
-  // 这里的 spinner 可以复用上面的，但去掉 margin-bottom
   .spinner {
     width: 40px;
     height: 40px;
