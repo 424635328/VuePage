@@ -1,44 +1,39 @@
 <!-- src/components/global/ConfirmDialog.vue -->
-
 <template>
-  <transition name="confirm-fade">
+  <transition name="confirm-fade" @after-leave="onAfterLeave">
     <div
       v-if="isShowing"
       class="confirm-overlay"
       @click.self="handleCancel"
-      @keydown.escape.prevent="handleCancel"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="confirm-title"
-      aria-describedby="confirm-message"
+      @keydown="handleKeydown"
+      tabindex="-1"
+      ref="overlayEl"
     >
-      <div class="confirm-dialog" ref="dialogEl">
+      <div
+        class="confirm-dialog"
+        :class="{ 'is-danger': type === 'danger' }"
+        ref="dialogEl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-message"
+      >
         <div class="confirm-header">
-          <!-- 添加一个视觉图标，增强提示性 -->
           <div class="icon-wrapper">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                fill-rule="evenodd"
-                d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z"
-                clip-rule="evenodd"
-              />
-            </svg>
+            <!-- 动态图标 -->
+            <component :is="iconComponent" aria-hidden="true" />
           </div>
           <h3 id="confirm-title">{{ title }}</h3>
         </div>
         <div class="confirm-body">
-          <p id="confirm-message">{{ message }}</p>
+          <!-- 使用 v-html 以支持消息中的简单 HTML 标签 -->
+          <p id="confirm-message" v-html="message"></p>
         </div>
         <div class="confirm-footer">
-          <button @click="handleCancel" class="btn btn-secondary">
+          <button @click="handleCancel" class="btn btn-secondary" ref="cancelButton">
             {{ cancelText }}
           </button>
-          <button @click="handleConfirm" class="btn btn-danger" ref="confirmButton">
+          <button @click="handleConfirm" class="btn btn-primary" ref="confirmButton">
             {{ confirmText }}
           </button>
         </div>
@@ -48,78 +43,122 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { nextTick, ref, watch, computed } from 'vue'
 import { useConfirm } from '@/composables/useConfirm'
 
-// 从 composable 获取数据和方法
-const {
-  isShowing,
-  title,
-  message,
-  confirmText,
-  cancelText,
-  handleConfirm,
-  handleCancel
-} = useConfirm()
+// --- Icon components (for dynamic rendering) ---
+const ExclamationTriangleIcon = {
+  name: 'ExclamationTriangleIcon',
+  template: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" /></svg>`
+}
+const InformationCircleIcon = {
+  name: 'InformationCircleIcon',
+  template: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm8.706-1.442c1.146-.573 2.437.463 2.126 1.706l-.709 2.836.042-.02a.75.75 0 01.67 1.34l-.042.02c-1.147.573-2.438-.463-2.127-1.706l.71-2.836-.042.02a.75.75 0 11-.671-1.34l.041-.02zM12 18a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" /></svg>`
+}
 
+// --- State and Refs ---
+const { isShowing, title, message, confirmText, cancelText, type, handleConfirm, handleCancel, onAfterLeave } = useConfirm()
+const overlayEl = ref(null)
 const dialogEl = ref(null)
 const confirmButton = ref(null)
+const lastActiveElement = ref(null)
 
-// 监听 isShowing 变化
-watch(isShowing, (newValue) => {
-  if (newValue) {
-    // 当对话框显示时，将焦点设置到确认按钮上，提升键盘操作体验
-    nextTick(() => {
-      confirmButton.value?.focus()
-    })
+// --- Dynamic Icon (FIXED) ---
+const iconComponent = computed(() => {
+  switch (type.value) {
+    case 'danger':
+      // 直接返回组件对象，不要用 ref 包裹
+      return ExclamationTriangleIcon
+    case 'info':
+    default:
+      // 直接返回组件对象，不要用 ref 包裹
+      return InformationCircleIcon
   }
 })
 
-// 添加键盘事件监听，允许按 Esc 关闭
-const handleKeydown = (event) => {
-  if (event.key === 'Escape' && isShowing.value) {
-    handleCancel()
+// --- Focus Trap Logic ---
+const focusTrap = (event) => {
+  if (event.key !== 'Tab' || !dialogEl.value) return
+
+  const focusableElements = dialogEl.value.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  )
+  const firstElement = focusableElements[0]
+  const lastElement = focusableElements[focusableElements.length - 1]
+
+  if (event.shiftKey) { // Shift + Tab
+    if (document.activeElement === firstElement) {
+      lastElement.focus()
+      event.preventDefault()
+    }
+  } else { // Tab
+    if (document.activeElement === lastElement) {
+      firstElement.focus()
+      event.preventDefault()
+    }
   }
 }
 
-onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
-})
+// --- Keyboard Handler ---
+const handleKeydown = (event) => {
+  if (event.key === 'Escape') {
+    handleCancel()
+  }
+  focusTrap(event)
+}
 
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown)
+// --- Lifecycle & Watchers ---
+watch(isShowing, (newValue) => {
+  if (newValue) {
+    lastActiveElement.value = document.activeElement
+    document.body.style.overflow = 'hidden'
+    nextTick(() => {
+      overlayEl.value?.focus()
+      confirmButton.value?.focus()
+    })
+  } else {
+    document.body.style.overflow = ''
+    lastActiveElement.value?.focus()
+  }
 })
 </script>
 
 <style scoped lang="scss">
-// 使用 CSS 变量来管理设计系统，方便维护和主题切换
-:root {
-  --confirm-bg: #2c2c34;
-  --confirm-overlay-bg: rgba(18, 18, 22, 0.8);
-  --confirm-border-color: rgba(255, 255, 255, 0.1);
-  --confirm-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
-  --confirm-text-primary: #f0f0f0;
-  --confirm-text-secondary: #a0a0b0;
-  --confirm-icon-bg: rgba(220, 38, 38, 0.1);
-  --confirm-icon-color: #ef4444;
-  --confirm-danger-bg: #e53935;
-  --confirm-danger-hover-bg: #c62828;
-  --confirm-danger-shadow: 0 4px 14px 0 rgba(229, 57, 53, 0.38);
-  --confirm-secondary-bg: #4f4f5a;
-  --confirm-secondary-hover-bg: #666672;
-  --confirm-border-radius: 12px;
-  --confirm-transition-duration: 0.3s;
-}
-
+/* 样式已根据你的截图进行微调，并修复了主题化逻辑 */
 .confirm-overlay {
+  --confirm-bg: #ffffff;
+  --confirm-overlay-bg: rgba(10, 10, 10, 0.4);
+  --confirm-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --confirm-text-primary: #111827;
+  --confirm-text-secondary: #4b5563;
+  --confirm-border-radius: 1rem; // 16px
+  --confirm-transition-duration: 0.3s;
+
+  /* 默认/信息 类型的主题色 */
+  --icon-bg-color: #e0e7ff;
+  --icon-fg-color: #6366f1; /* 紫色 */
+  --btn-primary-bg: #6366f1; /* 紫色 */
+  --btn-primary-hover-bg: #4f46e5;
+  --btn-primary-focus-ring: rgba(99, 102, 241, 0.6);
+
   position: fixed;
-  inset: 0; // 等价于 top, right, bottom, left = 0
+  inset: 0;
   background-color: var(--confirm-overlay-bg);
-  backdrop-filter: blur(4px); // 添加毛玻璃效果，更具现代感
+  backdrop-filter: blur(4px);
   display: grid;
   place-items: center;
   z-index: 1000;
   padding: 1rem;
+  outline: none;
+}
+
+/* 危险 类型的样式覆盖 */
+.confirm-dialog.is-danger {
+  --icon-bg-color: #fee2e2;
+  --icon-fg-color: #ef4444; /* 红色 */
+  --btn-primary-bg: #ef4444; /* 红色 */
+  --btn-primary-hover-bg: #dc2626;
+  --btn-primary-focus-ring: rgba(220, 38, 38, 0.6);
 }
 
 .confirm-dialog {
@@ -130,12 +169,12 @@ onUnmounted(() => {
   box-shadow: var(--confirm-shadow);
   display: flex;
   flex-direction: column;
-  text-align: center; // 内容居中，更符合弹窗的视觉焦点
-  overflow: hidden; // 确保子元素不会超出圆角
+  text-align: center;
+  overflow: hidden;
 }
 
 .confirm-header {
-  padding: 1.5rem 1.5rem 0;
+  padding: 1.75rem 1.5rem 0.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -144,89 +183,88 @@ onUnmounted(() => {
   .icon-wrapper {
     display: grid;
     place-items: center;
-    width: 48px;
-    height: 48px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    background-color: var(--confirm-icon-bg);
+    background-color: var(--icon-bg-color);
 
     svg {
-      width: 24px;
-      height: 24px;
-      color: var(--confirm-icon-color);
+      width: 32px;
+      height: 32px;
+      color: var(--icon-fg-color);
     }
   }
 
   h3 {
     margin: 0;
-    font-size: 1.375rem; // 稍微增大字号
-    font-weight: 700; // 加粗
+    font-size: 1.5rem; // 24px
+    font-weight: 700;
     color: var(--confirm-text-primary);
   }
 }
 
 .confirm-body {
-  padding: 1rem 1.75rem 1.5rem;
+  padding: 0.5rem 1.75rem 1.75rem;
   p {
     margin: 0;
-    font-size: 1rem;
+    font-size: 1rem; // 16px
     line-height: 1.6;
     color: var(--confirm-text-secondary);
   }
 }
 
 .confirm-footer {
-  display: grid; // 使用 grid 布局，轻松实现等宽按钮
+  display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 0.75rem; // 12px
   padding: 0 1.5rem 1.5rem;
 }
 
 .btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.95rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem; // 8px
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--confirm-transition-duration) cubic-bezier(0.25, 0.8, 0.25, 1);
-  outline: none; // 移除默认 outline
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
 
-  // 添加 focus 状态，提升键盘操作的可见性
   &:focus-visible {
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.6);
+    outline: 2px solid var(--btn-primary-focus-ring);
+    outline-offset: 2px;
   }
 }
 
 .btn-secondary {
-  background-color: var(--confirm-secondary-bg);
-  color: #fff;
+  background-color: #ffffff;
+  color: #374151;
+  border-color: #d1d5db;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 
   &:hover {
-    background-color: var(--confirm-secondary-hover-bg);
-    transform: translateY(-2px); // 添加轻微的上浮效果
+    background-color: #f9fafb;
   }
 }
 
-.btn-danger {
-  background-color: var(--confirm-danger-bg);
+.btn-primary {
+  background-color: var(--btn-primary-bg);
   color: #fff;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 
   &:hover {
-    background-color: var(--confirm-danger-hover-bg);
-    transform: translateY(-2px);
-    box-shadow: var(--confirm-danger-shadow);
+    background-color: var(--btn-primary-hover-bg);
   }
 }
 
-// 优化后的过渡动画
+// Transitions
 .confirm-fade-enter-active,
 .confirm-fade-leave-active {
-  transition: opacity var(--confirm-transition-duration) ease;
+  transition: opacity var(--confirm-transition-duration) ease-in-out;
 }
 .confirm-fade-enter-active .confirm-dialog,
 .confirm-fade-leave-active .confirm-dialog {
-  // 同时应用 transform 和 opacity 动画
-  transition: all var(--confirm-transition-duration) cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: all var(--confirm-transition-duration) cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .confirm-fade-enter-from,
@@ -235,8 +273,7 @@ onUnmounted(() => {
 }
 .confirm-fade-enter-from .confirm-dialog,
 .confirm-fade-leave-to .confirm-dialog {
-  // 结合 scale 和 translateY，动画效果更生动
   opacity: 0;
-  transform: translateY(20px) scale(0.95);
+  transform: translateY(30px) scale(0.95);
 }
 </style>
