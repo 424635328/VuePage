@@ -2,13 +2,22 @@
 
 ![VueJS](https://img.shields.io/badge/Vue.js-3.x-42b883) ![Vite](https://img.shields.io/badge/Vite-^5.0-646cff) ![Pinia](https://img.shields.io/badge/Pinia-^2.1-ffd859) ![Supabase](https://img.shields.io/badge/Supabase-Full%20Stack-3ecf8e) ![Performance](https://img.shields.io/badge/Public%20API%20QPS-%7E140-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
-本项目是一个基于 **Vue 3**、**Vite**、**Pinia** 和 **Supabase** 全家桶构建的、全栈式的企业级电子商务/作品集展示与工具平台。它从一个纯前端的作品集，逐步演进为一个功能完备的全栈应用，其核心目标是通过**企业级的代码架构**、**现代化的工程实践**和**极致的用户体验**，全面展示开发者在前后端整合、数据库设计、API 构建、性能优化、安全策略以及复杂前端工具开发方面的专业技能。
+本项目是一个基于 **Vue 3**、**Vite**、**Pinia** 和 **Supabase** 全家桶构建的、全栈式的企业级电子商务/作品集展示与工具平台。它从一个纯前端的作品集，逐步演进为一个功能完备的全栈应用，其核心目标是通过**企业级的代码架构**、**现代化的工程实践**和**对极致用户体验的苛刻追求**，全面展示开发者在前后端整合、数据库设计、API 构建、性能优化、安全策略以及复杂前端工具开发方面的专业技能。
 
 除了完整的商店系统，本项目还集成了一个功能强大的**在线图片编辑器**，展示了在复杂状态管理、Canvas 操作和高级用户交互方面的深厚实力。
 
+## 🏛️ 架构亮点
+
+- **组合式架构 (Composable Architecture)**: 全面采用 Vue 3 Composition API，通过自定义组合式函数 (`Composables`) 封装和复用跨组件的响应式逻辑，如 `useRedirect` 智能导航、`useToast` 通知系统等，实现了代码的高内聚、低耦合。
+- **原子化状态管理 (Atomic State Management)**: 利用 Pinia 实现细粒度的、可预测的全局状态管理。Store 按业务领域（`auth`, `products`）和 UI 领域 (`ui`) 划分，职责清晰，便于维护和调试。
+- **性能优先的渲染策略**: 关键页面如 `ShopPage` 采用 `IntersectionObserver` 实现**无限滚动**，避免了传统分页的性能瓶颈。全局导航采用**延迟加载提示**策略，优化了快速跳转的感知性能。
+- **面向未来的视觉组件**: 所有UI组件，尤其是全局组件，都采用了**性能优先的动画设计**，严格使用 `transform` 和 `opacity` 并结合 `will-change` 提示，确保动画由 GPU 加速，实现 60fps 的流畅体验，并遵循**可访问性**标准 (`prefers-reduced-motion`)。
+
 ## ✨ 核心特性
 
-- **惊艳的视觉效果**: 集成了一个由 React/TSX 精心移植而来的赛博朋克风格动态极光背景，包含了粒子、光球、视差、雨滴、闪电、霓虹灯等多种高级视觉特效。
+- **惊艳的视觉效果**:
+  - **动态全息背景**: 集成了一个由 React/TSX 精心移植而来的赛博朋克风格动态极光背景，包含了粒子、光球、视差、雨滴、闪电、霓虹灯等多种高级视觉特效。
+  - **GPU 加速的 UI 动效**: 所有关键UI，如全局导航提示，都采用了极致性能优化的动效设计，包括多层视差流光、3D入场动画和交互式微动效，提供了媲美原生应用的视觉反馈。
 
 - **现代化的全栈技术栈**: 全面拥抱 Vue 3 Composition API，利用 Vite 提供极速的开发体验。后端采用 **Supabase**，集成了 **Postgres 数据库**、**认证 (Auth)**、**对象存储 (Storage)** 和 **Edge Functions (Serverless API)**。
 
@@ -31,10 +40,13 @@
   - **健壮的图片管理**: 支持在编辑时更改或删除已上传的图片，并通过后端逻辑自动清理云存储中的孤儿文件。
 
 - **极致的用户体验 (UX)**:
-  - **无限滚动加载**: `Shop` 页面采用**无限滚动**加载商品列表，实现了极快的初始加载速度和流畅的浏览体验，避免了传统分页的性能瓶颈。
+  - **智能导航反馈系统**:
+    - **感知性能优化**: 实现了**延迟加载提示**。对于快速的路由切换，系统不会显示任何加载提示，避免了不必要的视觉闪烁，让应用感觉**快了一个数量级**。
+    - **避免冗余操作**: 系统能智能判断并**阻止到当前页面的重复导航**，防止无效的UI反馈。
+    - **优雅的视觉呈现**: 全局提示组件采用非对称的未来感设计，拥有多层视差流光、3D入场和状态脉冲等多种GPU加速的微动效。
+  - **无限滚动加载**: `Shop` 页面采用**无限滚动**加载商品列表，实现了极快的初始加载速度和流畅的浏览体验。
   - **非阻塞式反馈**: 大量使用自定义的 **Toast 通知**和**确认模态框**，取代了体验糟糕的原生 `alert` 和 `confirm`。
   - **“状态优先”的瞬时加载**: 在应用内导航时，通过 Pinia 暂存数据，实现了详情页的零延迟加载。
-  - **优雅的动画与过渡**: 大量运用 CSS 动画和过渡，实现了平滑的页面切换、元素入场效果和细腻的微交互。
 
 ## ⚡ 性能与优化报告
 
@@ -45,7 +57,7 @@
 1.  **识别瓶颈**: 初始版本的详情页存在“N+1”查询问题，在高并发下导致 Edge Function 超时和大量请求失败。
 2.  **后端优化**: 引入 **PostgreSQL 视图 (View)**，将多次数据库查询合并为一次，从根本上解决了查询效率问题。
 3.  **缓存策略**: 为公共 API (Edge Function) 添加 **CDN 缓存**响应头，将绝大多数重复请求的负载从数据库和函数中剥离。
-4.  **前端优化**: 重构了 `Shop` 页面，实现**无限滚动加载**，提升了用户仪表盘的初始加载性能和可扩展性。
+4.  **前端优化**: 重构了 `Shop` 页面，实现**无限滚动加载**；并构建了**智能导航反馈系统**，大幅提升了应用的感知性能和流畅度。
 
 ### 极限压力测试结果
 
@@ -97,7 +109,7 @@
     npm run dev
     ```
 
-## 📁 项目架构与文件解析 (全栈版)
+## 📁 项目架构与文件解析
 
 ```
 .
@@ -113,14 +125,16 @@
 └── 📁 src/
     ├── 📁 assets/             # 静态资源 (SCSS, JSON数据)
     ├── 📁 components/         # 可复用 UI 构建块
+    │   └── 📁 global/         # ✨ 全局单例组件 (如 GlobalRedirectingTip)
     │   └── 📁 editor/         # ✨ 图片编辑器核心组件
-    ├── 📁 composables/        # Vue 组合式函数 (如 useToast, useConfirm)
+    ├── 📁 composables/        # Vue 组合式函数
+    │   └── 📄 useRedirect.js   # ✨ (极致优化) 智能导航组合式函数
     ├── 📁 lib/                # 第三方库初始化 (Supabase Client)
     ├── 📁 router/             # Vue Router 配置
     ├── 📁 stores/             # Pinia 状态管理
+    │   ├── 📄 ui.js          # ✨ 全局 UI 状态 (负责驱动全局组件)
     │   ├── 📄 products.js    # (已优化) 商品分页与 CRUD
-    │   ├── 📄 imageEditor.js # ✨ 图片编辑器状态 (含历史记录)
-    │   └── 📄 fileVault.js    # ✨ 文件保险库状态
+    │   └── 📄 imageEditor.js # ✨ 图片编辑器状态 (含历史记录)
     └── 📁 views/              # 页面级组件
         ├── 📄 ShopPage.vue    # (已优化) 无限滚动商品列表
         └── 📄 ImageEditorPage.vue # ✨ 图片编辑器主页面
@@ -128,34 +142,30 @@
 
 ---
 
-### **核心模块解析**
+### **核心模块深度解析**
+
+#### **✨ `composables/useRedirect.js` & `components/global/GlobalRedirectingTip.vue` - 智能导航反馈系统**
+
+这是体现本项目对**极致用户体验**和**性能**追求的核心模块。它并非简单的“加载”提示，而是一个完整的、智能的导航体验管理系统。
+
+- **`useRedirect.js` (大脑)**: 一个极致优化的组合式函数。
+  - **感知性能优化**: 通过**延迟加载提示**（仅在导航 > 200ms 时显示），它消除了快速跳转时的UI闪烁，使应用响应速度在**感知层面**得到巨大提升。
+  - **智能预判**: 自动阻止到当前页面的重复导航，并能处理外部链接，保证了交互的健壮性和合理性。
+- **`GlobalRedirectingTip.vue` (视觉呈现)**: 一个全局单例组件，负责将导航状态以最优雅的方式呈现给用户。
+  - **企业级动效**: 动画完全由 GPU 加速 (`will-change`)，包含多层视差流光、3D入场和状态脉冲效果，同时遵循**可访问性**标准。
+  - **状态驱动**: 完全由 `stores/ui.js` 驱动，与业务逻辑彻底解耦。
 
 #### **`📁 src/views/ImageEditorPage.vue` & `📁 src/stores/imageEditor.js` - 在线图片编辑器**
 
 - **`ImageEditorPage.vue`**: 编辑器的主视图，负责整合各个子组件，并处理**全局事件**，如文件拖拽上传和键盘快捷键。
-  - **核心逻辑**: 通过监听 `keydown` 和 `keyup` 事件，实现了撤销/重做和空格平移等高级交互。特别地，它会检查事件目标（`event.target`）来避免在输入框中触发全局快捷键。
-- **`stores/imageEditor.js`**: 图片编辑器的“大脑”，一个 Pinia store，负责管理画布状态和编辑历史。
-  - **状态管理**: 维护 `history` (操作历史记录栈) 和 `historyIndex` (当前指针)，这是实现撤销/重做的基础。
-  - **核心 Actions**: `loadImage`, `applyFilter`, `undo`, `redo` 等 action 封装了所有不纯的操作，保证了状态变更的可预测性。
+- **`stores/imageEditor.js`**: 图片编辑器的“大脑”，一个 Pinia store，负责管理画布状态和编辑历史，实现了**非破坏性编辑**和无限撤销/重做。
 
 #### **`📁 supabase/` - 高性能后端**
 
-- **`functions/get-product-details/`**: 一个经过深度优化的公开 Serverless API。
-  - **作用**: 通过**单次查询** `product_details` 视图，安全、高效地获取包含所有关联图片的商品完整信息。
-  - **性能核心**:
-    1.  **查询层**: 使用数据库视图避免“N+1”问题。
-    2.  **缓存层**: 利用 `Cache-Control` 头实现 CDN 边缘缓存，大幅降低延迟和数据库负载。
-- **`migrations/`**: 存放数据库的结构定义 SQL，包括 `CREATE TABLE` 和 `CREATE VIEW` 语句，保证了后端环境的可复现性。
+- **`functions/get-product-details/`**: 一个经过深度优化的公开 Serverless API，通过**数据库视图**和**CDN缓存**两大核心技术，实现了高性能、高可用的公共数据查询。
+- **`migrations/`**: 存放数据库的结构定义 SQL，包括表、视图和行级安全策略（RLS），保证了后端环境的**可复现性**和**安全性**。
 
-#### **`📁 src/stores/products.js` - 优化的状态管理**
+#### **`📁 src/views/ShopPage.vue` & `📁 src/stores/products.js` - 高效数据加载**
 
-- **`products.js`**: 负责所有商品相关的 CRUD 异步操作，并实现了**高效的分页逻辑**。
-  - **分页加载**: `fetchInitialProducts` 和 `fetchMoreProducts` action 提供了清晰的分页接口。
-  - **精细化状态**: 通过 `loading`, `loadingMore`, `hasMore` 等状态，为前端实现复杂的加载 UI（如无限滚动）提供了有力支持。
-  - **乐观更新**: 删除操作采用“先从UI移除，再调用API”的乐观更新策略，提供极致的瞬时反馈。
-
-#### **`📁 src/views/ShopPage.vue` - 性能感知的页面组件**
-
-- **`ShopPage.vue`**: 用户登录后的主仪表盘。
-  - **性能**: 使用 `useIntersectionObserver` 实现了**无限滚动加载**，只在用户滚动到页面底部时才请求下一页数据，确保了极快的初始加载性能。
-  - **UI/UX**: 精确处理 `productsLoading` 和 `loadingMore` 状态，为用户提供了清晰的“初始加载”和“加载更多”的视觉反馈，避免了内容闪烁。
+- **`ShopPage.vue`**: 通过 `useIntersectionObserver` 实现了**无限滚动加载**，只在用户需要时才请求下一页数据，确保了极快的初始加载性能和可扩展性。
+- **`stores/products.js`**: 负责所有商品相关的 CRUD 异步操作，并为前端提供了精细化的加载状态 (`loading`, `loadingMore`, `hasMore`)，同时采用**乐观更新**策略，提供极致的瞬时反馈。
