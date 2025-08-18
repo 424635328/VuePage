@@ -1,16 +1,5 @@
 # .github/workflows/pull-request-checks.yml
-# 企业级优化版：PR 质量检查工作流
-# 优化点：
-# - 使用矩阵策略测试多个 Node.js 版本
-# - 将不同类型的检查（lint, test, build）分离到独立的 Job 中，可以并行运行以提速
-# - 明确定义 Job 之间的依赖关系 (needs)
-# - 为每个 Job 精确配置权限
-# - 提供一个最终的“总结” Job，汇总所有检查的结果
-#
-# 修正点：
-# - 修改触发器，只监听 pull_request 事件（包括 opened, synchronize, reopened）到 main 分支。
-# - 为每个 Job 添加了条件判断 (`if`)，要求 PR 必须带有 `release` 或 `automated-pr` 标签，
-#   从而确保检查只针对由 `create-sync-pr.yml` 工作流创建或更新的 PR 运行。
+# 最终正确版：使用“看门人”任务，只为自动化 PR 运行质量检查
 
 name: 'Pull Request Checks'
 
@@ -18,56 +7,61 @@ on:
   pull_request:
     branches:
       - main
-    # 修正：只触发 pull_request 事件，确保我们在检查 PR 本身。
-    # 添加 'synchronize' 和 'reopened' 类型，以覆盖 PR 的更新和重新打开场景。
     types: [opened, synchronize, reopened]
 
-# 移除 push 触发器，因为我们专注于 PR 检查。
-# 如果需要对 main 分支的直接 push 进行检查，可以单独配置另一个工作流。
-
 concurrency:
-  # 优化：对于 PR，取消同一 PR 的旧运行；对于 push (在此配置中已移除)，取消同一分支的旧运行
-  # 使用 PR 的 number 来创建更精确的并发组
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # 检查条件：
-  # `github.event.pull_request.labels.*.name` 会获取 PR 的所有标签名称列表。
-  # `contains()` 函数用来检查这个列表是否包含我们指定的标签。
-  # 这样可以确保只有当 PR 被 `create-sync-pr.yml` 打上 `release` 或 `automated-pr` 标签时，
-  # 后续的检查 Job 才会被执行。
+  check-labels:
+    name: Check PR Labels
+    runs-on: ubuntu-latest
+    # 将输出权限赋予这个任务，以便它可以设置一个输出值（虽然本例中没用到，但这是个好习惯）
+    permissions:
+      contents: read
+    outputs:
+      # 可以定义一个输出，供后续任务使用（可选）
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      # 这个任务的核心就是这个 if 条件
+      - id: check
+        # 只有当 PR 包含 'automated-pr' 标签时，这个步骤（以及整个任务）才会成功运行
+        if: contains(github.event.pull_request.labels.*.name, 'automated-pr')
+        run: |
+          echo "PR has the 'automated-pr' label. Proceeding with checks."
+          echo "should_run=true" >> $GITHUB_OUTPUT
+      # 如果 if 条件不满足，上面的步骤会被跳过，任务会以“成功”状态结束，但后续依赖它的任务会因为上下文不满足而被跳过。
 
-  # 任务一：代码规范和基础检查 (速度快，可并行)
+  # 任务一：代码规范和基础检查
   lint:
     name: Code Linter
     runs-on: ubuntu-latest
     permissions:
-      contents: read # 只需读取代码
-    # 修正：只有当 PR 具有 'release' 或 'automated-pr' 标签时才运行
-    if: contains(github.event.pull_request.labels.*.name, 'release') || contains(github.event.pull_request.labels.*.name, 'automated-pr')
+      contents: read
+    # 👇 核心修改 2: 让这个任务依赖于 'check-labels' 任务
+    needs: check-labels
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # lint 通常用一个版本即可
+          node-version: '20'
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
       - name: Run linter
         run: npm run lint
 
-  # 任务二：运行测试 (通常耗时较长，可并行)
+  # 任务二：运行测试
   test:
     name: Run Tests
     runs-on: ubuntu-latest
     permissions:
-      contents: read # 只需读取代码
-    # 修正：只有当 PR 具有 'release' 或 'automated-pr' 标签时才运行
-    if: contains(github.event.pull_request.labels.*.name, 'release') || contains(github.event.pull_request.labels.*.name, 'automated-pr')
-    # 优化：使用矩阵策略在多个 Node.js 版本上运行测试
+      contents: read
+    # 👇 核心修改 2: 让这个任务也依赖于 'check-labels' 任务
+    needs: check-labels
     strategy:
       matrix:
         node-version: [18.x, 20.x]
@@ -83,19 +77,15 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
-        # env: # 如果测试需要环境变量，可以在这里提供
-        #   CI: true
-        #   DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
 
-  # 任务三：运行构建 (通常依赖代码检查和测试)
+  # 任务三：运行构建
   build:
     name: Verify Build
     runs-on: ubuntu-latest
     permissions:
-      contents: read # 只需读取代码
-    # 修正：只有当 PR 具有 'release' 或 'automated-pr' 标签时才运行
-    if: contains(github.event.pull_request.labels.*.name, 'release') || contains(github.event.pull_request.labels.*.name, 'automated-pr')
-    # 优化：明确声明此任务需要 lint 和 test 任务成功后才能开始
+      contents: read
+    # 这个任务现在依赖于 lint 和 test
+    # 而 lint 和 test 都依赖于 check-labels，所以依赖链是正确的
     needs: [lint, test]
     steps:
       - name: Checkout code
@@ -103,24 +93,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # 构建通常用目标生产环境的版本
+          node-version: '20'
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
       - name: Build project
         run: npm run build
 
-  # 任务四：最终状态汇总 (守护者 Job)
+  # 任务四：最终状态汇总
   all-checks-passed:
     name: All Checks Passed
     runs-on: ubuntu-latest
-    # 修正：只有当 PR 具有 'release' 或 'automated-pr' 标签时才运行
-    if: contains(github.event.pull_request.labels.*.name, 'release') || contains(github.event.pull_request.labels.*.name, 'automated-pr')
-    # 优化：这个任务只在所有它依赖的任务都成功后才会运行
-    # 这为将来添加更多检查（如安全扫描、性能测试）提供了扩展点
-    needs: [lint, test, build]
-    # 优化：这个 job 不需要任何特殊权限
+    needs: [build] # 依赖于最终的 build 任务
     permissions: {}
     steps:
       - name: Signal successful completion
-        run: echo "✅ All quality checks have passed successfully!"
+        run: echo "✅ All quality checks for the automated PR have passed successfully!"
