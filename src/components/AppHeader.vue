@@ -5,6 +5,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useUiStore } from '@/stores/ui';
+import { useRedirect } from '@/composables/useRedirect'; // [NEW] 1. 导入 useRedirect
 import AuthModal from '@/components/auth/AuthModal.vue';
 import NavIcon from './common/NavIcon.vue';
 
@@ -12,6 +13,7 @@ import NavIcon from './common/NavIcon.vue';
 const authStore = useAuthStore();
 const uiStore = useUiStore();
 const route = useRoute();
+const { redirectWithTip } = useRedirect(); // [NEW] 2. 实例化 redirect composable
 
 // --- 响应式状态定义 ---
 const isMobileMenuOpen = ref(false);
@@ -68,14 +70,33 @@ const activeDropdown = computed(() => {
 });
 
 // --- 方法 (Methods) ---
+
+// [NEW] 3. 创建统一的导航处理函数
+const handleNavClick = (to) => {
+  // 如果移动端菜单是打开的，先关闭它
+  if (isMobileMenuOpen.value) {
+    closeMobileMenu();
+  }
+  // 使用我们的 redirect composable 来处理跳转
+  redirectWithTip(to);
+};
+
 const toggleMobileMenu = () => isMobileMenuOpen.value = !isMobileMenuOpen.value;
 const closeMobileMenu = () => isMobileMenuOpen.value = false;
 const openAuthModal = () => {
   closeMobileMenu();
   isAuthModalActive.value = true;
 };
+
+// [MODIFIED] 4. 更新注销方法以使用跳转提示
 const handleLogout = async () => {
   closeMobileMenu();
+  // 先显示提示并开始导航到首页
+  redirectWithTip('/', {
+    loadingMessage: '正在为您安全注销...',
+    successMessage: '您已成功注销！'
+  });
+  // 然后在后台执行实际的注销操作
   await authStore.signOut();
 };
 
@@ -110,16 +131,24 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
 <template>
   <header class="app-header" :class="{ scrolled: isScrolled, 'menu-open': isMobileMenuOpen }">
     <div class="container header-content">
-      <RouterLink to="/" class="logo" @click="closeMobileMenu">
-        <img src="/LOGO.jpeg" alt="MHStudio Logo" />
-        <span>MHStudio</span>
+      <!-- [MODIFIED] 使用 custom v-slot 拦截点击事件 -->
+      <RouterLink to="/" custom v-slot="{ href }">
+        <a :href="href" @click.prevent="handleNavClick('/')" class="logo">
+          <img src="/LOGO.jpeg" alt="MHStudio Logo" />
+          <span>MHStudio</span>
+        </a>
       </RouterLink>
 
       <!-- 桌面端导航 -->
       <nav class="desktop-nav" aria-label="主导航">
         <ul>
           <li v-for="link in filteredNavLinks" :key="link.text">
-            <RouterLink v-if="!link.children" :to="link.to">{{ link.text }}</RouterLink>
+            <!-- [MODIFIED] 使用 custom v-slot 拦截点击事件 -->
+            <RouterLink v-if="!link.children" :to="link.to" custom v-slot="{ href, isExactActive }">
+              <a :href="href" @click.prevent="handleNavClick(link.to)" :class="{ 'router-link-exact-active': isExactActive }">
+                {{ link.text }}
+              </a>
+            </RouterLink>
             <div v-else class="dropdown-container" @mouseenter="openDropdownMenu = link.text" @mouseleave="openDropdownMenu = null">
               <button
                 class="dropdown-button"
@@ -130,14 +159,16 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
                 {{ link.text }}
                 <svg class="dropdown-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>
               </button>
-              <!-- [美化] 修改下拉菜单动画 -->
               <transition name="dropdown-fade">
                 <div v-if="openDropdownMenu === link.text" class="dropdown-menu">
                   <transition-group tag="ul" name="staggered-item-fade" appear>
                     <li v-for="(child, index) in link.children" :key="child.to" :data-index="index">
-                      <RouterLink :to="child.to">
-                        <NavIcon :name="child.icon" />
-                        <span>{{ child.text }}</span>
+                      <!-- [MODIFIED] 使用 custom v-slot 拦截点击事件 -->
+                      <RouterLink :to="child.to" custom v-slot="{ href, isExactActive }">
+                        <a :href="href" @click.prevent="handleNavClick(child.to)" :class="{ 'router-link-exact-active': isExactActive }">
+                          <NavIcon :name="child.icon" />
+                          <span>{{ child.text }}</span>
+                        </a>
                       </RouterLink>
                     </li>
                   </transition-group>
@@ -148,7 +179,7 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
         </ul>
       </nav>
 
-      <!-- 右侧操作按钮 -->
+      <!-- 右侧操作按钮 (注销按钮已通过修改 handleLogout 方法来支持) -->
       <div class="header-actions">
         <template v-if="isAuthenticated">
           <button @click="handleLogout" class="cta-button auth-button">注销</button>
@@ -179,9 +210,12 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
       <nav v-if="isMobileMenuOpen" class="mobile-nav" aria-label="移动端导航">
         <ul id="mobile-nav-list">
           <li v-for="(item, index) in flatNavLinksForMobile" :key="item.to" :style="{ '--delay': index * 0.05 + 's' }">
-            <RouterLink :to="item.to">
-              <NavIcon :name="item.icon" />
-              <span>{{ item.text }}</span>
+            <!-- [MODIFIED] 使用 custom v-slot 拦截点击事件 -->
+            <RouterLink :to="item.to" custom v-slot="{ href, isExactActive }">
+              <a :href="href" @click.prevent="handleNavClick(item.to)" :class="{ 'router-link-exact-active': isExactActive }">
+                <NavIcon :name="item.icon" />
+                <span>{{ item.text }}</span>
+              </a>
             </RouterLink>
           </li>
           <li class="mobile-cta-item" :style="{ '--delay': flatNavLinksForMobile.length * 0.05 + 's' }">
@@ -242,6 +276,7 @@ watch([isMobileMenuOpen, isAuthModalActive], ([isMenuOpen, isModalOpen]) => {
     color: var(--color-text); font-size: 1rem; font-weight: 500;
     padding: 0.5rem 1rem; position: relative; text-decoration: none; border-radius: 8px;
     transition: color 0.3s ease, background-color 0.3s ease;
+    cursor: pointer; /* [MODIFIED] 确保 a 标签有指针手势 */
     &:hover { color: var(--color-heading); background-color: var(--color-background-mute); }
     &.router-link-exact-active {
       color: var(--color-primary); font-weight: 600; background-color: var(--color-primary-translucent);
