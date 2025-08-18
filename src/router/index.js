@@ -111,6 +111,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/cdk-management',
+      name: 'cdk-management',
+      component: () => import('../views/CdkPage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/404',
       name: 'NotFound',
       component: () => import('../views/NotFoundPage.vue'),

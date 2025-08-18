@@ -26,6 +26,7 @@ const navLinks = ref([
   { text: '首页', to: '/', icon: 'house-door-fill' },
   { text: '商店', to: '/shop', icon: 'box-seam-fill' },
   { text: '保险库', to: '/vault', icon: 'safe-fill', auth: true },
+  { text: 'CDK管理', to: '/cdk-management', icon: 'key-fill', auth: true },
   {
     text: '更多',
     children: [

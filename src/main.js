@@ -1,4 +1,4 @@
-// src/main.js (优化后)
+// src/main.js
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
@@ -18,7 +18,7 @@ const head = createHead()
 app.use(createPinia())
 app.use(router)
 app.use(MotionPlugin)
-app.use(head) 
+app.use(head)
 
 // 注册自定义指令
 app.directive('lazy-load', lazyLoadDirective)
