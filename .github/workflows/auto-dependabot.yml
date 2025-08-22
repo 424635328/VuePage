@@ -1,17 +1,17 @@
 # ========================================================================================
-# Dependabot Observatory: 全自动 Dependabot PR 处理工作流 (v3.1 - 语法修复版)
+# Dependabot Observatory: 全自动 Dependabot PR 处理工作流 (v3.2 - 兼容性修复版)
 # ========================================================================================
 #
 # 这是一个高级工作流，用于全自动管理 Dependabot 提交的拉取请求（PR）。
 # 它扮演着“天文台”（Observatory）的角色，在所有CI检查完成后，智能地决定是
 # 自动合并、请求人工审查还是关闭PR，并发表一份详细的报告。
 #
-# 核心特性 (v3.1):
+# 核心特性 (v3.2):
+#   - 【修复】在 `dependabot/fetch-metadata` 步骤中明确传递 PR 编号，以兼容 `check_suite` 触发器。
 #   - 引入"决策引擎"，将所有逻辑判断集中处理，生成明确的决策(MERGE, REVIEW, CLOSE)和报告。
 #   - 提供极其详尽的报告，无论成功、失败还是需要审查，都会清晰列出原因和检查项状态。
 #   - 智能区分有无分支保护规则的场景，并采取不同策略。
 #   - 统一的执行步骤，让工作流结构更清晰。
-#   - 修正了YAML语法，确保工作流可以被正确解析和执行。
 #
 name: Dependabot Observatory
 
@@ -78,18 +78,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+      # 【关键修复】
+      # 此处添加了 `pr-number` 输入。
+      # 原因：工作流由 `check_suite` 事件触发，其上下文与 `pull_request` 事件不同。
+      # `dependabot/fetch-metadata` action 默认期望从 `pull_request` 事件上下文中自动
+      # 寻找PR信息。由于触发器不同，我们必须显式地将 "Step 1" 中提取的PR编号传递给它，
+      # 这样它才能正确地找到并分析PR的元数据，避免因找不到上下文而报错退出。
+      # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
       - name: "Step 2: 获取 Dependabot 元数据"
         id: dependabot-metadata
         uses: dependabot/fetch-metadata@v2.2.0
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
+          pr-number: ${{ steps.pr-info.outputs.pr_number }} # <--- 这是唯一的修改点
 
       # ========================================================================================
       # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ 核心决策引擎 ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
       # ========================================================================================
       - name: "Step 3: Decision Engine & Report Generator"
         id: engine
-        run: | # <-- 关键修复：使用 `|` 声明这是一个多行脚本，避免YAML解析错误
+        run: |
           set -euo pipefail
           echo "🧠 [Decision Engine] 开始分析 PR #${{ steps.pr-info.outputs.pr_number }}..."
           
@@ -97,6 +106,13 @@ jobs:
           ALL_CHECKS_JSON=$(gh api "repos/${{ github.repository }}/commits/${{ steps.pr-info.outputs.pr_head_sha }}/check-runs" --jq '.check_runs')
           REQUIRED_CHECKS_JSON=$(gh api "repos/${{ github.repository }}/branches/${{ steps.pr-info.outputs.base_branch }}/protection" --jq '.required_status_checks.contexts' 2>/dev/null || echo "[]")
           UPDATE_TYPE="${{ steps.dependabot-metadata.outputs.update-type }}"
+          
+          # 检查 UPDATE_TYPE 是否为空，如果为空则说明元数据获取失败
+          if [ -z "$UPDATE_TYPE" ]; then
+            echo "❌ 错误：无法从 dependabot/fetch-metadata 获取更新类型 (update-type)。"
+            echo "这可能意味着上一步骤失败或者这不是一个有效的 Dependabot PR。"
+            exit 1
+          fi
           
           DECISION="CLOSE" # 默认决策为关闭，除非所有条件都满足
           CHECKS_PASSED=false
@@ -145,7 +161,6 @@ jobs:
           fi
 
           # --- 4. 生成详细的报告内容 ---
-          # 为了在bash脚本中安全地处理多行字符串和特殊字符，我们使用一种更健壮的方式来生成报告
           delimiter=$(openssl rand -hex 8) # 生成一个唯一的定界符
           
           generate_report() {
@@ -210,7 +225,7 @@ jobs:
       # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ 统一执行操作 ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
       # ========================================================================================
       - name: "Step 4: Execute Decision"
-        run: | # <-- 关键修复：使用 `|`
+        run: |
           set -euo pipefail
           DECISION="${{ steps.engine.outputs.decision }}"
           REPORT_BODY="${{ steps.engine.outputs.report_body }}"
