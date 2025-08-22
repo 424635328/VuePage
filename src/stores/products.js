@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useAuthStore } from './auth'
 import { useToastStore } from './toast'
 
-// 定义每页加载的商品数量，可以根据你的卡片大小调整
+// 定义每页加载的商品数量
 const PAGE_SIZE = 12
 
 export const useProductsStore = defineStore('products', () => {
@@ -21,34 +21,36 @@ export const useProductsStore = defineStore('products', () => {
   const hasMore = ref(true)
   const loadingMore = ref(false) // 用于【加载更多时】的 loading 状态
 
-  // --- 新增搜索状态 ---
+  // --- 搜索状态 ---
   const currentSearchQuery = ref('')
 
   const authStore = useAuthStore()
   const toastStore = useToastStore()
 
-  // ✨ 核心修改一：将查询构建逻辑提取出来，以便复用
-  const buildQuery = () => {
-    let query = supabase
-      .from('products')
-      .select('*')
-      .eq('user_id', authStore.user.id)
-      .order('created_at', { ascending: false })
+  // ✨ 优化一：封装核心的数据获取逻辑，调用数据库 RPC 函数
+  // 这个函数现在是所有商品查询的唯一入口，无论是普通浏览还是搜索
+  async function fetchProductsByPage(pageToFetch) {
+    const from = (pageToFetch - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
 
-    // 如果有搜索词，则添加过滤条件
-    if (currentSearchQuery.value) {
-      const searchTerm = `%${currentSearchQuery.value}%`
-      // 使用 .or() 来同时搜索 name 和 description 字段
-      query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm}`)
-    }
+    // 使用 .rpc() 调用我们在 Supabase 中创建的数据库函数
+    const { data, error: fetchError } = await supabase
+      .rpc('search_products', {
+        // 传递函数需要的参数
+        user_id_param: authStore.user.id,
+        search_term: currentSearchQuery.value || '', // 确保传递的是字符串
+      })
+      .order('created_at', { ascending: false }) // RPC 返回的是表类型，可以继续链式调用
+      .range(from, to)
 
-    return query
+    if (fetchError) throw fetchError
+    return data
   }
 
-  // ✨ 核心修改二：fetchInitialProducts 使用新的 buildQuery
+  // ✨ 优化二：fetchInitialProducts 变得更简洁，只负责管理状态并调用核心获取函数
   async function fetchInitialProducts() {
     if (!authStore.user) return
-    if (loading.value || loadingMore.value) return
+    if (loading.value) return // 简化判断
 
     loading.value = true
     error.value = null
@@ -57,20 +59,15 @@ export const useProductsStore = defineStore('products', () => {
     hasMore.value = true
 
     try {
-      const from = 0
-      const to = PAGE_SIZE - 1
-
-      const query = buildQuery() // 使用构建函数
-      const { data, error: fetchError } = await query.range(from, to)
-
-      if (fetchError) throw fetchError
+      const data = await fetchProductsByPage(1)
 
       if (data) {
         products.value = data
         if (data.length < PAGE_SIZE) {
           hasMore.value = false
         } else {
-          page.value++
+          // 准备加载下一页
+          page.value = 2
         }
       } else {
         hasMore.value = false
@@ -83,19 +80,13 @@ export const useProductsStore = defineStore('products', () => {
     }
   }
 
-  // ✨ 核心修改三：fetchMoreProducts 也使用新的 buildQuery
+  // ✨ 优化三：fetchMoreProducts 也同样简化
   async function fetchMoreProducts() {
     if (loading.value || loadingMore.value || !hasMore.value || !authStore.user) return
 
     loadingMore.value = true
     try {
-      const from = (page.value - 1) * PAGE_SIZE
-      const to = from + PAGE_SIZE - 1
-
-      const query = buildQuery() // 使用构建函数
-      const { data, error: fetchError } = await query.range(from, to)
-
-      if (fetchError) throw fetchError
+      const data = await fetchProductsByPage(page.value)
 
       if (data && data.length > 0) {
         products.value.push(...data)
@@ -114,14 +105,13 @@ export const useProductsStore = defineStore('products', () => {
     }
   }
 
-  // ✨ 新增：搜索功能的核心入口
+  // ✨ 优化四：搜索函数的职责非常清晰：更新状态，然后重新加载
   async function searchProducts(query) {
     const trimmedQuery = query.trim()
-    // 如果搜索词没有变化，则不执行任何操作
     if (trimmedQuery === currentSearchQuery.value) return
 
     currentSearchQuery.value = trimmedQuery
-    // 触发一次全新的数据加载，它会自动使用 currentSearchQuery
+    // 触发一次全新的数据加载，它会自动使用最新的 currentSearchQuery
     await fetchInitialProducts()
   }
 
@@ -132,7 +122,6 @@ export const useProductsStore = defineStore('products', () => {
     error.value = null
     loading.value = false
     loadingMore.value = false
-    // ✨ 清除时也重置搜索词
     currentSearchQuery.value = ''
   }
 
@@ -162,12 +151,12 @@ export const useProductsStore = defineStore('products', () => {
       }
 
       const productToInsert = {
-        ...productData, // 包含 name 和 description
+        ...productData,
         user_id: authStore.user.id,
-        public_id: crypto.randomUUID(), // 在前端生成 public_id，确保立即可用
+        public_id: crypto.randomUUID(),
         thumbnail_url: imageUrls.length > 0 ? imageUrls[0] : null,
       }
-      delete productToInsert.id // 确保不传递 id 字段进行插入
+      delete productToInsert.id
 
       const { data: newProduct, error: insertError } = await supabase
         .from('products')
@@ -207,7 +196,6 @@ export const useProductsStore = defineStore('products', () => {
     loading.value = true
     error.value = null
     try {
-      // 1. 获取旧图片列表，用于对比和删除
       const { data: oldImages, error: fetchError } = await supabase
         .from('product_images')
         .select('image_url')
@@ -217,7 +205,6 @@ export const useProductsStore = defineStore('products', () => {
       const oldImageUrls = oldImages.map((img) => img.image_url)
       const existingImageUrls = existingImages.map((img) => img.image_url)
 
-      // 2. 找出需要从 Storage 中删除的图片
       const imagesToDelete = oldImageUrls.filter((url) => !existingImageUrls.includes(url))
       if (imagesToDelete.length > 0) {
         const pathsToDelete = imagesToDelete.map(
@@ -226,11 +213,9 @@ export const useProductsStore = defineStore('products', () => {
         await supabase.storage.from('product-images').remove(pathsToDelete)
       }
 
-      // 3. 上传新添加的图片
       const newImageUploadPromises = newImageFiles.map((file) => uploadProductImage(file))
       const newImageUrls = await Promise.all(newImageUploadPromises)
 
-      // 4. 合并并准备最终要写入数据库的图片记录
       const finalImageUrls = [...existingImageUrls, ...newImageUrls]
       const finalImageRecords = finalImageUrls.map((url, index) => ({
         product_id: productId,
@@ -238,7 +223,6 @@ export const useProductsStore = defineStore('products', () => {
         position: index,
       }))
 
-      // 5. 先删除旧的图片关系，再插入新的
       const { error: deleteError } = await supabase
         .from('product_images')
         .delete()
@@ -252,7 +236,6 @@ export const useProductsStore = defineStore('products', () => {
         if (insertError) throw insertError
       }
 
-      // 6. 更新 product 表本身
       const thumbnail_url = finalImageUrls.length > 0 ? finalImageUrls[0] : null
       const { data: finalProduct, error: updateError } = await supabase
         .from('products')
@@ -267,7 +250,6 @@ export const useProductsStore = defineStore('products', () => {
         .single()
       if (updateError) throw updateError
 
-      // 7. 更新本地 state
       const index = products.value.findIndex((p) => p.id === productId)
       if (index !== -1) {
         products.value[index] = finalProduct
@@ -296,7 +278,6 @@ export const useProductsStore = defineStore('products', () => {
         .from('product_images')
         .select('image_url')
         .eq('product_id', productId)
-
       if (fetchImagesError) throw fetchImagesError
 
       if (images && images.length > 0) {
@@ -307,9 +288,7 @@ export const useProductsStore = defineStore('products', () => {
         const { error: storageError } = await supabase.storage
           .from('product-images')
           .remove(pathsToRemove)
-        if (storageError) {
-          console.error('未能从存储中移除部分图片:', storageError.message)
-        }
+        if (storageError) console.error('未能从存储中移除部分图片:', storageError.message)
       }
 
       const { error: dbError } = await supabase.from('products').delete().eq('id', productId)
@@ -337,12 +316,12 @@ export const useProductsStore = defineStore('products', () => {
     error,
     hasMore,
     loadingMore,
-    currentSearchQuery, // ✨ 导出新状态
+    currentSearchQuery,
     // actions
     fetchInitialProducts,
     fetchMoreProducts,
     clearProducts,
-    searchProducts, // ✨ 导出新方法
+    searchProducts,
     addProduct,
     updateProduct,
     deleteProduct,
