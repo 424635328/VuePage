@@ -1,5 +1,4 @@
 <!-- src/components/VideoSplashScreen.vue -->
-
 <script setup>
 import { ref, watch, nextTick } from 'vue';
 
@@ -9,14 +8,23 @@ const props = defineProps({
    */
   active: { type: Boolean, default: false },
   /**
-   * 视频文件的路径。
-   * 建议放置在 `public` 目录下，例如 `/video.mp4`。
-   */ 
-  videoSrc: { type: String, required: true },
+   * 视频源数组，用于提供多种格式以增强浏览器兼容性。
+   * @type {Array<{src: String, type: String}>}
+   * @example [{ src: '/video/splash.webm', type: 'video/webm' }, { src: '/video/splash.mp4', type: 'video/mp4' }]
+   */
+  sources: {
+    type: Array,
+    required: true,
+    // 添加验证器，确保传入的数据格式正确
+    validator: (value) =>
+      Array.isArray(value) &&
+      value.length > 0 &&
+      value.every(item => typeof item.src === 'string' && typeof item.type === 'string')
+  },
   /**
    * 视频播放结束后显示的提示文字
    */
-  promptText: { type: String, default: '点击任意位置继续' },
+  promptText: { type: String, default: '开启数字之旅' },
 });
 
 const emit = defineEmits(['update:active']);
@@ -24,7 +32,7 @@ const emit = defineEmits(['update:active']);
 // 响应式引用
 const videoPlayer = ref(null);
 const isVideoFinished = ref(false);
-const isDismissing = ref(false); // 新增状态，防止重复触发关闭
+const isDismissing = ref(false);
 
 /**
  * 当视频播放结束时触发。
@@ -35,12 +43,9 @@ const onVideoEnded = () => {
 
 /**
  * 点击屏幕以关闭开屏动画。
- * 此函数现在可以随时触发，实现“跳过”功能。
  */
 const dismiss = () => {
-  // 如果正在关闭中，则不执行任何操作，防止重复点击
   if (isDismissing.value) return;
-
   isDismissing.value = true;
   emit('update:active', false);
 };
@@ -50,10 +55,11 @@ const dismiss = () => {
  */
 const resetState = () => {
   isVideoFinished.value = false;
-  isDismissing.value = false; // 重置关闭状态
-  // 确保 DOM 更新后再操作 video 元素
+  isDismissing.value = false;
   nextTick(() => {
     if (videoPlayer.value) {
+      // 关键改动：先调用 load() 方法来加载新的 <source>
+      videoPlayer.value.load();
       videoPlayer.value.currentTime = 0;
       videoPlayer.value.play().catch(error => {
         console.error("视频自动播放失败:", error);
@@ -65,7 +71,6 @@ const resetState = () => {
 // 监听 active 属性的变化
 watch(() => props.active, (isActive) => {
   if (isActive) {
-    // 当组件被激活时，重置状态并准备播放
     resetState();
   }
 }, { immediate: true });
@@ -79,9 +84,13 @@ watch(() => props.active, (isActive) => {
       class="splash-screen-container"
       @click="dismiss"
     >
+      <!--
+        核心改动:
+        1. 移除 :src 属性。
+        2. 使用 v-for 循环 props.sources 数组来动态生成 <source> 标签。
+      -->
       <video
         ref="videoPlayer"
-        :src="videoSrc"
         class="fullscreen-video"
         autoplay
         muted
@@ -89,11 +98,17 @@ watch(() => props.active, (isActive) => {
         preload="auto"
         @ended="onVideoEnded"
       >
+        <!-- 动态生成 source 标签 -->
+        <source
+          v-for="source in sources"
+          :key="source.src"
+          :src="source.src"
+          :type="source.type"
+        />
         你的浏览器不支持 Video 标签。
       </video>
 
       <Transition name="prompt-fade">
-        <!-- 提示文字仅在视频自然播放结束后显示 -->
         <div v-if="isVideoFinished" class="click-prompt">
           {{ promptText }}
         </div>
@@ -102,14 +117,15 @@ watch(() => props.active, (isActive) => {
   </Transition>
 </template>
 
+<!-- 样式部分无需改动，此处省略 -->
 <style lang="scss" scoped>
+/* ... 你的样式代码保持不变 ... */
 .splash-screen-container {
   position: fixed;
   inset: 0;
   z-index: 9999;
   background-color: #000;
   overflow: hidden;
-  /* 直接设置为指针，表示任何时候都可以点击跳过 */
   cursor: pointer;
 }
 
@@ -117,7 +133,6 @@ watch(() => props.active, (isActive) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* 确保视频本身不会捕获点击事件，让容器来处理 */
   pointer-events: none;
 }
 

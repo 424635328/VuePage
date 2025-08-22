@@ -1,11 +1,11 @@
 <!-- src/views/HomePage.vue -->
- 
+
 <template>
   <div class="home-page">
     <VideoSplashScreen
       v-if="isMaskActive"
       v-model:active="isMaskActive"
-      video-src="/video/video.mp4"
+      :sources="videoSources"
       prompt-text="开启数字之旅"
     />
 
@@ -105,6 +105,12 @@ const portfolioSectionRef = ref(null);
 // [新增] 用于鼠标视差效果的状态
 const mouseX = ref(0);
 const mouseY = ref(0);
+
+// 定义一个视频源数组，把 WebM 格式放在前面
+const videoSources = [
+  { src: '/video/output.webm', type: 'video/webm' },
+  { src: '/video/output_small.mp4', type: 'video/mp4' }
+];
 
 // --- Data ---
 const services = ref([
