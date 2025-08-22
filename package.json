@@ -14,7 +14,7 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.55.0",
+    "@supabase/supabase-js": "^2.56.0",
     "@vueuse/core": "^13.7.0",
     "@vueuse/head": "^2.0.0",
     "@vueuse/motion": "^3.0.3",
