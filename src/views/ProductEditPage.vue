@@ -1,15 +1,12 @@
 <!-- src/views/ProductEditPage.vue -->
 
 <script setup>
-//  1. 引入 onUnmounted
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import imageCompression from 'browser-image-compression';
 import draggable from 'vuedraggable';
 
-//  2. 引入 DropZoneOverlay 组件
 import DropZoneOverlay from '@/components/common/DropZoneOverlay.vue';
-
 import { useProductsStore } from '@/stores/products';
 import { useToastStore } from '@/stores/toast';
 import { supabase } from '@/lib/supabaseClient';
@@ -24,11 +21,12 @@ const images = ref([]);
 const loading = ref(true);
 const saving = ref(false);
 const error = ref(null);
-const isDragOver = ref(false); // 用于局部占位符的拖拽状态
+const isDragOver = ref(false);
 const fileInput = ref(null);
 
-//  3. 新增用于全局拖拽浮层的状态
 const isDropZoneVisible = ref(false);
+// NEW: 添加一个状态来跟踪 vuedraggable 是否正在拖拽
+const isReordering = ref(false);
 
 const publicId = computed(() => route.params.public_id);
 const isEditing = computed(() => !!publicId.value);
@@ -40,13 +38,15 @@ onMounted(async () => {
   } else {
     loading.value = false;
   }
-  // 4. 添加全局拖拽事件监听
+  // MODIFIED: 添加 'dragleave' 事件监听
   window.addEventListener('dragenter', handleDragEnter);
+  window.addEventListener('dragleave', handleDragLeave);
 });
 
-//  5. 在组件卸载时移除监听，防止内存泄漏
 onUnmounted(() => {
+  // MODIFIED: 移除 'dragleave' 事件监听
   window.removeEventListener('dragenter', handleDragEnter);
+  window.removeEventListener('dragleave', handleDragLeave);
 });
 
 async function loadProductForEdit(pid) {
@@ -74,22 +74,34 @@ async function loadProductForEdit(pid) {
   }
 }
 
-//  6. 定义全局拖拽进入的处理函数
-function handleDragEnter() {
-  // 仅在非保存状态下显示浮层
-  if (!saving.value) {
+// MODIFIED: 增强 handleDragEnter 以区分文件拖拽和元素拖拽
+function handleDragEnter(event) {
+  // EXPLANATION:
+  // 1. 如果正在保存或正在进行内部排序，则不显示浮层。
+  // 2. event.dataTransfer.types.includes('Files') 是关键检查。
+  //    只有从操作系统拖入文件时，该类型才会存在。
+  //    vuedraggable 的内部拖拽不包含 'Files' 类型。
+  if (saving.value || isReordering.value) return;
+
+  if (event.dataTransfer.types.includes('Files')) {
     isDropZoneVisible.value = true;
   }
 }
 
-//  7. 定义文件被全局放置后的处理函数
-async function handleFilesDropped(files) {
-  isDropZoneVisible.value = false; // 首先关闭浮层
-  await processFiles(files); // 调用现有的文件处理函数
+// NEW: 添加 handleDragLeave 用于在拖拽离开窗口时隐藏浮层
+function handleDragLeave(event) {
+  // EXPLANATION:
+  // 当鼠标离开浏览器窗口时，dragleave 事件的 relatedTarget 为 null。
+  // 这个检查可以防止在窗口内部元素之间移动时错误地隐藏浮层。
+  if (event.relatedTarget === null) {
+    isDropZoneVisible.value = false;
+  }
 }
 
-
-// --- 现有函数 (无需修改) ---
+async function handleFilesDropped(files) {
+  isDropZoneVisible.value = false;
+  await processFiles(files);
+}
 
 function triggerFileInput() {
   fileInput.value.click();
@@ -192,7 +204,15 @@ async function handleSubmit() {
             accept="image/png, image/jpeg, image/webp" class="file-input-hidden" />
 
           <div class="gallery-container">
-            <draggable v-model="images" item-key="id" class="image-gallery-grid" ghost-class="ghost">
+            <!-- MODIFIED: 添加 @start 和 @end 事件监听来控制 isReordering 状态 -->
+            <draggable
+              v-model="images"
+              item-key="id"
+              class="image-gallery-grid"
+              ghost-class="ghost"
+              @start="isReordering = true"
+              @end="isReordering = false"
+            >
               <template #item="{ element, index }">
                 <div class="gallery-item">
                   <img :src="element.image_url" :alt="form.name" class="gallery-image" />
@@ -227,15 +247,20 @@ async function handleSubmit() {
       </form>
     </div>
 
-    <!--  8. 在模板中添加拖拽上传组件 -->
-    <DropZoneOverlay v-if="isDropZoneVisible" title="添加图片" prompt="松开鼠标即可将图片添加到当前商品" @close="isDropZoneVisible = false"
-      @files-dropped="handleFilesDropped" />
+    <!-- DropZoneOverlay 组件本身无需修改 -->
+    <DropZoneOverlay
+      v-if="isDropZoneVisible"
+      title="添加图片"
+      prompt="松开鼠标即可将图片添加到当前商品"
+      @close="isDropZoneVisible = false"
+      @files-dropped="handleFilesDropped"
+    />
 
   </div>
 </template>
 
 <style lang="scss" scoped>
-/* 所有现有样式都是正确的，无需修改 */
+/* 样式无需修改 */
 @use '@/assets/styles/index.scss' as *;
 
 .edit-page {
