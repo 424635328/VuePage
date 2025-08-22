@@ -1,3 +1,5 @@
+<!-- src/views/ImageEditorPage.vue -->
+
 <template>
   <div class="image-editor-page"
     @dragover.prevent="handleDragOver"
