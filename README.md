@@ -1,17 +1,57 @@
 # Vue 3 全栈项目：电商 & 工具平台
 
-![VueJS](https://img.shields.io/badge/Vue.js-3.x-42b883) ![Vite](https://img.shields.io/badge/Vite-^5.0-646cff) ![Pinia](https://img.shields.io/badge/Pinia-^2.1-ffd859) ![Supabase](https://img.shields.io/badge/Supabase-Full%20Stack-3ecf8e) ![Performance](https://img.shields.io/badge/Public%20API%20QPS-%7E140-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+
+![项目展示动画](https://your-repository-url/path-to/project-showcase.gif)
+_<p align="center">一个动图或精美截图，展示应用的核心亮点，如动态背景、图片编辑器或流畅的UI交互。</p>_
+
+<p align="center">
+  <a href="https://your-live-demo-url.com" target="_blank">
+    <img src="https://img.shields.io/badge/LIVE%20DEMO-🚀%20访问线上应用-brightgreen?style=for-the-badge" alt="Live Demo">
+  </a>
+</p>
+
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Vue.js-3.x-42b883?style=flat-square" alt="VueJS">
+  <img src="https://img.shields.io/badge/Vite-^5.0-646cff?style=flat-square" alt="Vite">
+  <img src="https://img.shields.io/badge/Pinia-^2.1-ffd859?style=flat-square" alt="Pinia">
+  <img src="https://img.shields.io/badge/Supabase-Full%20Stack-3ecf8e?style=flat-square" alt="Supabase">
+  <img src="https://img.shields.io/badge/Public%20API%20QPS-%7E140-brightgreen?style=flat-square" alt="Performance">
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License">
+</p>
 
 本项目是一个基于 **Vue 3**、**Vite**、**Pinia** 和 **Supabase** 全家桶构建的、全栈式的企业级电子商务/作品集展示与工具平台。它从一个纯前端的作品集，逐步演进为一个功能完备的全栈应用，其核心目标是通过**企业级的代码架构**、**现代化的工程实践**和**对极致用户体验的苛刻追求**，全面展示开发者在前后端整合、数据库设计、API 构建、性能优化、安全策略以及复杂前端工具开发方面的专业技能。
 
-除了完整的商店系统，本项目还集成了一个功能强大的**在线图片编辑器**，展示了在复杂状态管理、Canvas 操作和高级用户交互方面的深厚实力。
+除了完整的商店系统，本项目还集成了一个功能强大的**在线图片编辑器**和一个**高安全性的密码管理器**，展示了在复杂状态管理、Canvas 操作、Web Crypto API 应用和高级用户交互方面的深厚实力。
+
+
+## 🎯 项目目标与开发者能力展示
+
+这个项目不仅是一个功能性的应用，更是一份**技术简历**，旨在向技术负责人和招聘官展示以下核心能力：
+
+- **全栈思维**: 能够独立设计和实现从数据库到用户界面的完整产品链路。
+- **架构设计能力**: 采用模块化、可组合、可扩展的架构，应对复杂业务需求。
+- **性能优化意识**: 主动识别并解决从前端渲染到后端查询的全链路性能瓶颈。
+- **用户体验至上**: 深入思考用户交互的每一个细节，并用技术手段实现流畅、直观的体验。
+- **解决复杂问题的能力**: 比如实现非破坏性编辑器、高性能混合索引搜索等具有挑战性的功能。
 
 ## 🏛️ 架构亮点
 
-- **组合式架构 (Composable Architecture)**: 全面采用 Vue 3 Composition API，通过自定义组合式函数 (`Composables`) 封装和复用跨组件的响应式逻辑，如 `useRedirect` 智能导航、`useToast` 通知系统等，实现了代码的高内聚、低耦合。
-- **原子化状态管理 (Atomic State Management)**: 利用 Pinia 实现细粒度的、可预测的全局状态管理。Store 按业务领域（`auth`, `products`）和 UI 领域 (`ui`) 划分，职责清晰，便于维护和调试。
+- **组合式架构 (Composable Architecture)**: 全面采用 Vue 3 Composition API，通过自定义组合式函数 (`Composables`) 封装和复用跨组件的响应式逻辑，如 `useRedirect` 智能导航、`useToast` 通知系统、`useClipboard` 剪贴板工具等，实现了代码的高内聚、低耦合。
+- **原子化状态管理 (Atomic State Management)**: 利用 Pinia 实现细粒度的、可预测的全局状态管理。Store 按业务领域（`auth`, `products`, `password`, `imageEditor`）和 UI 领域 (`ui`) 划分，职责清晰，便于维护和调试。
 - **性能优先的渲染策略**: 关键页面如 `ShopPage` 采用 `IntersectionObserver` 实现**无限滚动**，避免了传统分页的性能瓶颈。全局导航采用**延迟加载提示**策略，优化了快速跳转的感知性能。
 - **面向未来的视觉组件**: 所有UI组件，尤其是全局组件，都采用了**性能优先的动画设计**，严格使用 `transform` 和 `opacity` 并结合 `will-change` 提示，确保动画由 GPU 加速，实现 60fps 的流畅体验，并遵循**可访问性**标准 (`prefers-reduced-motion`)。
+
+
+## 🛠️ 技术栈 (Technology Stack)
+
+| 领域         | 技术/工具                                                                                              | 目的与应用场景                                                            |
+| :----------- | :----------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
+| **前端**     | `Vue 3` (Composition API), `Vite`, `Vue Router`, `Pinia`, `SCSS`, `@vueuse/core`, `@vueuse/head` (SEO) | 构建响应式、高性能的单页应用，实现模块化状态管理和搜索引擎优化。          |
+| **后端**     | `Supabase` (BaaS), `PostgreSQL`, `Edge Functions` (Deno), `Storage`, `Auth`                            | 提供数据库、认证、文件存储和 Serverless API，实现快速、可扩展的后端服务。 |
+| **核心库**   | `browser-image-compression`, `zxcvbn-ts`, `CryptoJS`, `k6` (压力测试)                                  | 分别用于前端图片压缩、密码强度评估、数据加解密和后端性能压力测试。        |
+| **代码质量** | `ESLint`, `Prettier`                                                                                   | 保证代码风格统一，遵循最佳实践，提升代码可读性和可维护性。                |
+
 
 ## ✨ 核心特性
 
@@ -26,6 +66,12 @@
   - **高级交互**: 实现了**全局快捷键**支持（如 `Ctrl/Cmd + Z` 撤销，`Ctrl/Cmd + Y` 重做，`空格键` 拖拽画布），并智能地在输入状态下禁用快捷键，避免冲突。
   - **非破坏性编辑**: 所有操作都基于历史记录栈，用户可以无限次地**撤销 (Undo)** 和**重做 (Redo)**，保证了原始图片的安全。
   - **模块化架构**: 编辑器由 `TopMenuBar`, `EditorToolbar`, `CanvasArea`, `RightPanels` 等多个高内聚、低耦合的组件构成，结构清晰，易于扩展。
+
+
+- **高安全性的密码管理器**:
+  - **端到端加密**: 用户的主密码**永远不会离开浏览器**。它仅在本地通过 PBKDF2 算法派生出加密密钥，用于加解密密码库。服务器只存储加密后的数据，无法解密。
+  - **零知识证明**: 通过存储一个加密后的“验证字符串”，实现了在不传输主密码的情况下验证其正确性，遵循零知识架构原则。
+  - **安全特性**: 集成了密码强度评估 (`zxcvbn-ts`)、自动锁定、一键生成强密码等功能，提供了完整的密码安全解决方案。
 
 - **企业级后端架构与优化**:
   - **高性能数据查询**: 通过创建 **Postgres 数据库视图 (View)**，预先聚合商品及其关联图片，将原有的“N+1”查询优化为单次高效查询，数据库负载降低 50% 以上。
@@ -90,25 +136,22 @@
     cd your-repo-name
     ```
 2.  **安装前端依赖**
+    <!-- 删除了重复的 npm install 命令 -->
     ```bash
-    npm install @vueuse/core @vueuse/head # 新增 @vueuse/head
     npm install
     ```
 3.  **配置环境变量**
-    - 在项目根目录创建一个 `.env` 文件。
-    - 登录您的 [Supabase 项目](https://app.supabase.com/)，在 `Project Settings > API` 中找到您的 URL 和 `anon` key。
-    - 将它们添加到 `.env` 文件中：
-      ```env
-      VITE_SUPABASE_URL="YOUR_SUPABASE_URL"
-      VITE_SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
-      ```
+    <!-- 更新为更简单的操作 -->
+    - 在项目根目录复制 `.env.example` 文件并重命名为 `.env`。
+    - 登录您的 [Supabase 项目](https://app.supabase.com/)，在 `Project Settings > API` 中找到您的 URL 和 `anon` key，并填入 `.env` 文件。
+
 4.  **配置 Supabase 后端**
     - **✨ (更新) 启用数据库扩展**: 进入 Supabase 项目的 `Database > Extensions` 页面，搜索并启用 `pg_trgm` 扩展。
-    - **数据库**: 进入 Supabase 项目的 `SQL Editor`，将本项目根目录 `supabase/migrations` 文件夹中的 SQL 脚本内容（包括 `CREATE TABLE`, `CREATE VIEW`, `RLS` 策略, **索引创建** 和 **数据库函数**）粘贴并执行。
+    - **数据库**: 进入 Supabase 项目的 `SQL Editor`，将本项目根目录 `supabase/migrations` 文件夹中的 SQL 脚本内容**一次性**粘贴并执行。
     - **认证**: 在 `Authentication > Providers` 中，启用 `Email` 和 `GitHub`。同时在 `Authentication > Email Templates` 中自定义邮件模板。
     - **Edge Function**:
       ```bash
-      # 登录并链接您的项目
+      # 登录并链接您的项目 (首次配置需要)
       npx supabase login
       npx supabase link --project-ref <YOUR_PROJECT_REF>
       # 部署公共 API
@@ -120,6 +163,9 @@
     ```
 
 ## 📁 项目架构与文件解析
+
+
+
 
 ```
 .
@@ -137,8 +183,10 @@
 └── 📁 src/
     ├── 📁 assets/             # 静态资源 (SCSS, JSON数据)
     ├── 📁 components/         # 可复用 UI 构建块
-    │   └── 📁 global/         # ✨ 全局单例组件 (如 GlobalRedirectingTip)
-    │   └── 📁 editor/         # ✨ 图片编辑器核心组件
+    │   ├── 📁 common/         # ✨ 通用基础组件 (如 BaseIcon, ConfirmModal)
+    │   ├── 📁 global/         # ✨ 全局单例组件 (如 GlobalRedirectingTip)
+    │   ├── 📁 editor/         # ✨ 图片编辑器核心组件
+    │   └── 📁 password/       # ✨ 密码管理器核心组件
     ├── 📁 composables/        # Vue 组合式函数
     │   └── 📄 useRedirect.js   # ✨ (极致优化) 智能导航组合式函数
     ├── 📁 lib/                # 第三方库初始化 (Supabase Client)
@@ -146,10 +194,12 @@
     ├── 📁 stores/             # Pinia 状态管理
     │   ├── 📄 ui.js          # ✨ 全局 UI 状态 (负责驱动全局组件)
     │   ├── 📄 products.js    # ✨ (深度优化) 商品分页、CRUD 及高性能搜索
-    │   └── 📄 imageEditor.js # ✨ 图片编辑器状态 (含历史记录)
+    │   ├── 📄 imageEditor.js # ✨ 图片编辑器状态 (含历史记录)
+    │   └── 📄 password.js    # ✨ 密码管理器状态 (含加密逻辑)
     └── 📁 views/              # 页面级组件
         ├── 📄 ShopPage.vue    # ✨ (新增搜索) 无限滚动商品列表
-        └── 📄 ImageEditorPage.vue # ✨ 图片编辑器主页面
+        ├── 📄 ImageEditorPage.vue # ✨ 图片编辑器主页面
+        └── 📄 PasswordGeneratorPage.vue # ✨ 密码管理器主页面
 ```
 
 ---

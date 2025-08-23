@@ -11,10 +11,10 @@
             <div class="spinner"></div>
           </div>
           <div v-else-if="uiState === 'error'" class="status-icon error">
-            <i class="fas fa-exclamation-triangle"></i>
+            <BaseIcon name="trash" />
           </div>
           <div v-else class="status-icon auth">
-            <i class="fas fa-key"></i>
+            <BaseIcon name="key" />
           </div>
         </div>
 
@@ -27,7 +27,7 @@
           <h2>连接失败</h2>
           <p>{{ pageError }}</p>
           <button @click="window.location.reload()" class="retry-btn">
-            <i class="fas fa-redo"></i> 重新连接
+            <BaseIcon name="refresh" /> 重新连接
           </button>
         </div>
 
@@ -51,7 +51,7 @@
                 :disabled="passwordStore.isLoading"
                 class="toggle-btn"
               >
-                <i :class="['fas', showPassword ? 'fa-eye-slash' : 'fa-eye']"></i>
+                <BaseIcon :name="showPassword ? 'eye-slash' : 'eye'" />
               </button>
             </div>
 
@@ -81,21 +81,21 @@
       <!-- 顶部工具栏 -->
       <header class="toolbar">
         <div class="toolbar-left">
-          <h1><i class="fas fa-key"></i> 密码管家</h1>
+          <h1><BaseIcon name="key" /> 密码管家</h1>
           <div class="status-badge">
-            <i class="fas fa-shield-check"></i> 已解锁
+            <BaseIcon name="check" /> 已解锁
           </div>
         </div>
         <div class="toolbar-right">
           <div class="stats">
-            <span><i class="fas fa-database"></i> {{ passwordStore.savedPasswords?.length || 0 }} 个密码</span>
-            <span><i class="fas fa-clock"></i> {{ formatTime(new Date()) }}</span>
+            <span><BaseIcon name="circle-stack" /> {{ passwordStore.filteredArchive?.length || 0 }} 个密码</span>
+            <span><BaseIcon name="clock" /> {{ formatTime(new Date()) }}</span>
           </div>
           <button @click="passwordStore.generateNewPassword" class="action-btn generate">
-            <i class="fas fa-sync-alt"></i> 生成
+            <BaseIcon name="refresh" /> 生成
           </button>
           <button @click="passwordStore.lockVault" class="action-btn lock">
-            <i class="fas fa-lock"></i> 锁定
+            <BaseIcon name="lock-closed" /> 锁定
           </button>
         </div>
       </header>
@@ -131,12 +131,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { usePasswordStore } from '@/stores/password'
 import { useToast } from '@/composables/useToast'
 import GeneratorControls from '@/components/password/GeneratorControls.vue'
 import GeneratedResult from '@/components/password/GeneratedResult.vue'
 import ArchiveManager from '@/components/password/ArchiveManager.vue'
+import BaseIcon from '@/components/common/BaseIcon.vue'
 
 const passwordStore = usePasswordStore()
 const { addToast } = useToast()
@@ -145,6 +146,9 @@ const formError = ref('')
 const pageError = ref('')
 const showPassword = ref(false)
 const initialCheckDone = ref(false)
+
+const AUTO_LOCK_TIME = 5 * 60 * 1000 // 5 分钟
+let autoLockTimer = null
 
 const uiState = computed(() => {
   if (pageError.value) return 'error';
@@ -181,10 +185,36 @@ async function handleSubmit() {
   }
 }
 
+function resetAutoLockTimer() {
+  clearTimeout(autoLockTimer);
+  if (passwordStore.isUnlocked) {
+    autoLockTimer = setTimeout(() => {
+      passwordStore.lockVault();
+      addToast({ message: '密码库因闲置已自动锁定', type: 'info', duration: 5000 });
+    }, AUTO_LOCK_TIME);
+  }
+}
+
+watch(() => passwordStore.isUnlocked, (isUnlocked) => {
+  if (isUnlocked) {
+    resetAutoLockTimer();
+    window.addEventListener('mousemove', resetAutoLockTimer, { passive: true });
+    window.addEventListener('keydown', resetAutoLockTimer, { passive: true });
+    window.addEventListener('click', resetAutoLockTimer, { passive: true });
+  } else {
+    clearTimeout(autoLockTimer);
+    window.removeEventListener('mousemove', resetAutoLockTimer);
+    window.removeEventListener('keydown', resetAutoLockTimer);
+    window.removeEventListener('click', resetAutoLockTimer);
+  }
+});
+
 onMounted(async () => {
   try {
     await passwordStore.checkVaultStatus();
-    passwordStore.generateNewPassword();
+    if (passwordStore.isUnlocked) {
+      passwordStore.generateNewPassword();
+    }
   } catch (error) {
     const errorMessage = error.message || "网络连接失败";
     pageError.value = errorMessage;
@@ -195,15 +225,17 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  clearTimeout(autoLockTimer);
   if (passwordStore.isUnlocked) {
     passwordStore.lockVault()
   }
+  window.removeEventListener('mousemove', resetAutoLockTimer);
+  window.removeEventListener('keydown', resetAutoLockTimer);
+  window.removeEventListener('click', resetAutoLockTimer);
 })
 </script>
 
 <style lang="scss" scoped>
-@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css');
-
 // 全局样式变量
 :root {
   --primary: #3b82f6;
@@ -261,7 +293,11 @@ onUnmounted(() => {
     align-items: center;
     justify-content: center;
     margin: 0 auto;
-    font-size: 2rem;
+
+    svg {
+      width: 2.5rem;
+      height: 2.5rem;
+    }
 
     &.loading {
       background: rgba(59, 130, 246, 0.1);
@@ -348,6 +384,11 @@ onUnmounted(() => {
       cursor: pointer;
       padding: 0.25rem;
 
+      svg {
+        width: 1.25rem;
+        height: 1.25rem;
+      }
+
       &:hover {
         color: var(--primary);
       }
@@ -377,16 +418,27 @@ onUnmounted(() => {
     border: none;
     border-radius: 8px;
     font-weight: 500;
+    font-size: 1rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, background-color 0.2s;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
 
     &:hover:not(:disabled) {
       background: var(--primary-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(0);
+      box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
     }
 
     &:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+      background: #334155;
+      box-shadow: none;
     }
   }
 }
@@ -400,6 +452,14 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s;
   margin-top: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  svg {
+    width: 1rem;
+    height: 1rem;
+  }
 
   &:hover {
     background: #dc2626;
@@ -433,17 +493,19 @@ onUnmounted(() => {
       font-weight: 700;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.75rem;
 
-      i {
+      svg {
         color: var(--primary);
+        width: 1.5rem;
+        height: 1.5rem;
       }
     }
 
     .status-badge {
       display: flex;
       align-items: center;
-      gap: 0.375rem;
+      gap: 0.5rem;
       background: rgba(16, 185, 129, 0.1);
       color: var(--success);
       padding: 0.25rem 0.75rem;
@@ -451,6 +513,11 @@ onUnmounted(() => {
       font-size: 0.875rem;
       font-weight: 500;
       border: 1px solid rgba(16, 185, 129, 0.2);
+
+      svg {
+        width: 1rem;
+        height: 1rem;
+      }
     }
   }
 
@@ -469,10 +536,12 @@ onUnmounted(() => {
       span {
         display: flex;
         align-items: center;
-        gap: 0.375rem;
+        gap: 0.5rem;
 
-        i {
+        svg {
           color: var(--primary);
+          width: 1rem;
+          height: 1rem;
         }
       }
     }
@@ -488,6 +557,11 @@ onUnmounted(() => {
       cursor: pointer;
       transition: all 0.2s;
       font-size: 0.875rem;
+
+      svg {
+        width: 1rem;
+        height: 1rem;
+      }
 
       &.generate {
         background: rgba(59, 130, 246, 0.1);

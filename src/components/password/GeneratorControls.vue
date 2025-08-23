@@ -11,7 +11,7 @@
         <input
           type="range"
           id="length"
-          min="8"
+          min="6"
           max="64"
           v-model.number="store.config.length"
           @input="store.generateNewPassword"

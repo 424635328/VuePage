@@ -10,10 +10,10 @@
         class="password-output"
       />
       <button @click="copyPassword" class="action-btn" :title="copied ? '已复制!' : '复制密码'">
-        <i :class="['fas', copied ? 'fa-check' : 'fa-copy']"></i>
+        <BaseIcon :name="copied ? 'check' : 'copy'" />
       </button>
       <button @click="store.generateNewPassword" class="action-btn refresh-btn" title="重新生成">
-        <i class="fas fa-sync-alt"></i>
+        <BaseIcon name="refresh" />
       </button>
     </div>
 
@@ -29,31 +29,28 @@
     <div class="divider"></div>
 
     <div class="save-section">
-      <h3>保存到密码库</h3>
+      <h3>{{ isUpdating ? '更新密码' : '保存到密码库' }}</h3>
       <form @submit.prevent="handleSave">
         <input v-model="platform" type="text" placeholder="平台 (例如: Google, Github)" required />
         <input v-model="label" type="text" placeholder="标签/用户名 (选填)" />
         <textarea v-model="notes" placeholder="备注 (选填)"></textarea>
 
         <button type="submit" class="save-button" :disabled="store.isLoading || !isSaveable">
-          <span v-if="store.isLoading">
-            <i class="fas fa-spinner fa-spin"></i> 保存中...
-          </span>
-          <span v-else>
-            <i class="fas fa-save"></i> 保存密码
-          </span>
+          <span v-if="store.isLoading"><i class="fas fa-spinner fa-spin"></i> 处理中...</span>
+          <span v-else-if="isUpdating"><i class="fas fa-sync-alt"></i> 更新密码</span>
+          <span v-else><i class="fas fa-save"></i> 保存新密码</span>
         </button>
-
       </form>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { usePasswordStore } from '@/stores/password'
 import { useClipboard } from '@vueuse/core'
 import { useToast } from '@/composables/useToast'
+import BaseIcon from '@/components/common/BaseIcon.vue'
 
 const store = usePasswordStore()
 const { copy, copied } = useClipboard({ timeout: 1500 })
@@ -64,6 +61,21 @@ const label = ref('')
 const notes = ref('')
 
 const isSaveable = computed(() => platform.value.trim() !== '');
+
+const existingItem = computed(() => {
+  if (!platform.value) return null;
+  const platformName = platform.value.trim().toLowerCase();
+  return store.archive.find(item => item.platform.toLowerCase() === platformName);
+});
+
+const isUpdating = computed(() => !!existingItem.value);
+
+watch(existingItem, (item) => {
+  if (item) {
+    label.value = item.label || '';
+    notes.value = item.notes || '';
+  }
+});
 
 const strengthInfo = computed(() => {
   const score = store.currentGenerated.strength.score;
@@ -92,17 +104,29 @@ function copyPassword() {
 async function handleSave() {
   if (!isSaveable.value) return;
   try {
-    await store.savePassword({
+    const details = {
       platform: platform.value,
       label: label.value,
       notes: notes.value,
-    });
-    addToast({ message: `"${platform.value}" 的密码已成功保存！`, type: 'success' });
+    };
+
+    if (isUpdating.value) {
+      await store.updatePassword(existingItem.value.id, {
+        ...details,
+        password: store.currentGenerated.password,
+      });
+      addToast({ message: `"${platform.value}" 的密码已成功更新！`, type: 'success' });
+    } else {
+      await store.savePassword(details);
+      addToast({ message: `"${platform.value}" 的密码已成功保存！`, type: 'success' });
+    }
+
     platform.value = '';
     label.value = '';
     notes.value = '';
+    store.generateNewPassword();
   } catch (error) {
-    addToast({ message: error.message || '保存失败，请重试。', type: 'error' });
+    addToast({ message: error.message || '操作失败，请重试。', type: 'error' });
   }
 }
 </script>
@@ -139,13 +163,15 @@ async function handleSave() {
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease-in-out;
-  font-size: 1.2rem;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: #2E2D3D;
-  color: #A9A8B8;
+  color: #c7c7e1;
 
-  i {
+  svg {
+    width: 1.5rem;
+    height: 1.5rem;
     transition: transform 0.2s ease;
   }
 
@@ -153,7 +179,7 @@ async function handleSave() {
     background-color: #393850;
     color: #fff;
     border-color: #4a4960;
-    i {
+    svg {
       transform: scale(1.1);
     }
   }
@@ -163,7 +189,7 @@ async function handleSave() {
     color: #1A1926;
     border-color: transparent;
     &:hover {
-      background: #29D47A; /* 保持背景色 */
+      background: #29D47A;
       filter: brightness(1.1);
     }
   }
