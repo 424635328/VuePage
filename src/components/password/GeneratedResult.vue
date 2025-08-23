@@ -9,10 +9,10 @@
         readonly
         class="password-output"
       />
-      <button @click="copyPassword" class="icon-button copy-btn" :title="copied ? '已复制!' : '复制密码'">
+      <button @click="copyPassword" class="action-btn" :title="copied ? '已复制!' : '复制密码'">
         <i :class="['fas', copied ? 'fa-check' : 'fa-copy']"></i>
       </button>
-      <button @click="store.generateNewPassword" class="icon-button refresh-btn" title="重新生成">
+      <button @click="store.generateNewPassword" class="action-btn refresh-btn" title="重新生成">
         <i class="fas fa-sync-alt"></i>
       </button>
     </div>
@@ -32,9 +32,18 @@
       <h3>保存到密码库</h3>
       <form @submit.prevent="handleSave">
         <input v-model="platform" type="text" placeholder="平台 (例如: Google, Github)" required />
-        <input v-model="label" type="text" placeholder="标签/用户名 (例如: work-email)" required />
-        <textarea v-model="notes" placeholder="备注 (可选)"></textarea>
-        <!-- 保存按钮暂时移除，可以后续添加 -->
+        <input v-model="label" type="text" placeholder="标签/用户名 (选填)" />
+        <textarea v-model="notes" placeholder="备注 (选填)"></textarea>
+
+        <button type="submit" class="save-button" :disabled="store.isLoading || !isSaveable">
+          <span v-if="store.isLoading">
+            <i class="fas fa-spinner fa-spin"></i> 保存中...
+          </span>
+          <span v-else>
+            <i class="fas fa-save"></i> 保存密码
+          </span>
+        </button>
+
       </form>
     </div>
   </div>
@@ -54,16 +63,18 @@ const platform = ref('')
 const label = ref('')
 const notes = ref('')
 
+const isSaveable = computed(() => platform.value.trim() !== '');
+
 const strengthInfo = computed(() => {
   const score = store.currentGenerated.strength.score;
   const map = [
     { text: '非常弱', color: '#E55353', width: '10%' },
     { text: '弱', color: '#F9B115', width: '30%' },
-    { text: '中等', color: '#F9B115', width: '60%' }, // 设计图是黄色
-    { text: '强', color: '#19D47A', width: '80%' },
-    { text: '非常强', color: '#19D47A', width: '100%' },
+    { text: '中等', color: '#F9B115', width: '60%' },
+    { text: '强', color: '#29D47A', width: '80%' },
+    { text: '非常强', color: '#29D47A', width: '100%' },
   ];
-  return map[score] || { text: '', color: '#393850', width: '0%' };
+  return map[score] || { text: '', color: '#313042', width: '0%' };
 });
 
 const strengthBarStyle = computed(() => ({
@@ -79,7 +90,20 @@ function copyPassword() {
 }
 
 async function handleSave() {
-  // 保存逻辑保持不变
+  if (!isSaveable.value) return;
+  try {
+    await store.savePassword({
+      platform: platform.value,
+      label: label.value,
+      notes: notes.value,
+    });
+    addToast({ message: `"${platform.value}" 的密码已成功保存！`, type: 'success' });
+    platform.value = '';
+    label.value = '';
+    notes.value = '';
+  } catch (error) {
+    addToast({ message: error.message || '保存失败，请重试。', type: 'error' });
+  }
 }
 </script>
 
@@ -87,7 +111,7 @@ async function handleSave() {
 .result-container {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
 }
 
 .result-display-wrapper {
@@ -97,8 +121,8 @@ async function handleSave() {
 
 .password-output {
   flex-grow: 1;
-  background: #2A293D;
-  border: 1px solid #393850;
+  background: #2E2D3D;
+  border: 1px solid #313042;
   color: #fff;
   padding: 0.75rem 1rem;
   border-radius: 8px;
@@ -107,26 +131,41 @@ async function handleSave() {
   font-weight: bold;
 }
 
-.icon-button {
+.action-btn {
   flex-shrink: 0;
   width: 50px;
   height: 50px;
-  border: none;
+  border: 1px solid #313042;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease-in-out;
   font-size: 1.2rem;
+  display: grid;
+  place-items: center;
+  background: #2E2D3D;
+  color: #A9A8B8;
 
-  &.copy-btn {
-    background: #2A293D;
-    color: #C7C7E1;
-    border: 1px solid #393850;
-    &:hover { background-color: #393850; }
+  i {
+    transition: transform 0.2s ease;
   }
+
+  &:hover {
+    background-color: #393850;
+    color: #fff;
+    border-color: #4a4960;
+    i {
+      transform: scale(1.1);
+    }
+  }
+
   &.refresh-btn {
-    background: #19D47A;
-    color: #1E1D2B;
-    &:hover { filter: brightness(1.1); }
+    background: #29D47A;
+    color: #1A1926;
+    border-color: transparent;
+    &:hover {
+      background: #29D47A; /* 保持背景色 */
+      filter: brightness(1.1);
+    }
   }
 }
 
@@ -140,7 +179,7 @@ async function handleSave() {
   flex-grow: 1;
   width: 100%;
   height: 6px;
-  background: #2A293D;
+  background: #313042;
   border-radius: 3px;
   overflow: hidden;
 }
@@ -161,7 +200,7 @@ async function handleSave() {
 .divider {
   width: 100%;
   height: 1px;
-  background-color: #393850;
+  background-color: #313042;
   margin: 0.5rem 0;
 }
 
@@ -173,8 +212,8 @@ async function handleSave() {
   h3 { margin: 0; color: #fff; font-size: 1.1rem; }
 
   input, textarea {
-    background: #2A293D;
-    border: 1px solid #393850;
+    background: #2E2D3D;
+    border: 1px solid #313042;
     color: #C7C7E1;
     padding: 0.8rem 1rem;
     border-radius: 8px;
@@ -184,8 +223,8 @@ async function handleSave() {
 
      &:focus {
         outline: none;
-        border-color: #19D47A;
-        background-color: #1E1D2B;
+        border-color: #29D47A;
+        background-color: #232230;
       }
     &::placeholder {
       color: #5C5B77;
@@ -196,6 +235,42 @@ async function handleSave() {
     resize: vertical;
     min-height: 80px;
     font-family: inherit;
+  }
+}
+
+.save-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.8rem;
+  margin-top: 0.5rem;
+  background: linear-gradient(to right, #29D47A, #24b86a);
+  color: #1A1926;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(41, 212, 122, 0.2);
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(41, 212, 122, 0.3);
+    filter: brightness(1.1);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: #313042;
+    cursor: not-allowed;
+    color: #5C5B77;
+    box-shadow: none;
   }
 }
 </style>

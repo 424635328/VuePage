@@ -58,7 +58,8 @@ const store = usePasswordStore()
   h2 {
     margin: 0 0 1.5rem 0;
     color: #fff;
-    font-size: 1.5rem;
+    font-size: 1.75rem;
+    font-weight: 600;
   }
 }
 
@@ -67,20 +68,21 @@ const store = usePasswordStore()
   .search-icon {
     position: absolute; left: 1.25rem; top: 50%;
     transform: translateY(-50%); color: #5C5B77;
+    transition: color 0.2s;
   }
   .search-input {
     width: 100%;
-    padding: 1rem 1rem 1rem 3rem;
-    background: #2A293D;
-    border: 1px solid #393850;
+    padding: 1rem 1rem 1rem 3.5rem;
+    background: #2E2D3D;
+    border: 1px solid #313042;
     color: #C7C7E1;
     border-radius: 8px;
     font-size: 1rem;
     transition: all 0.2s;
     &::placeholder { color: #5C5B77; }
     &:focus {
-      outline: none; border-color: #19D47A; background-color: #1E1D2B;
-      & + .search-icon { color: #19D47A; }
+      outline: none; border-color: #29D47A; background-color: #232230;
+      & + .search-icon { color: #29D47A; }
     }
   }
 }
@@ -106,18 +108,19 @@ const store = usePasswordStore()
 
   &.empty-archive {
     .empty-icon-wrapper {
-      width: 100px; height: 100px;
+      width: 120px; height: 120px;
       border-radius: 50%;
-      background-color: #2A293D;
+      background-color: #2E2D3D;
       display: grid; place-items: center;
-      margin-bottom: 1.5rem;
-      i { font-size: 2.5rem; color: #5C5B77; }
+      margin-bottom: 2rem;
+      border: 1px solid #313042;
+      i { font-size: 3rem; color: #5C5B77; }
     }
-    h3 { margin: 0 0 0.5rem 0; color: #C7C7E1; font-size: 1.1rem; }
+    h3 { margin: 0 0 0.5rem 0; color: #C7C7E1; font-size: 1.1rem; font-weight: 500; }
     p { margin: 0; }
   }
 }
-/* 列表过渡动画 */
+
 .list-enter-active, .list-leave-active { transition: all 0.4s ease; }
-.list-enter-from, .list-leave-to { opacity: 0; transform: translateX(20px); }
+.list-enter-from, .list-leave-to { opacity: 0; transform: translateY(20px); }
 </style>
