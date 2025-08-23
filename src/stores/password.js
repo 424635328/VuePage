@@ -1,35 +1,13 @@
-// src/stores/password.js (已升级)
+// src/stores/password.js (已修改为无验证模式)
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { zxcvbn } from '@zxcvbn-ts/core'
-import * as CryptoJS from 'crypto-js'
 import { supabase } from '@/lib/supabaseClient'
 
-// --- 辅助函数 (无变化) ---
-function deriveKey(password, salt) {
-  const keySize = 256 / 32
-  const iterations = 100000
-  return CryptoJS.PBKDF2(password, salt, { keySize, iterations }).toString()
-}
+// --- 加密相关的辅助函数已被移除 ---
 
-function encryptData(data, key) {
-  const jsonString = JSON.stringify(data)
-  return CryptoJS.AES.encrypt(jsonString, key).toString()
-}
-
-function decryptData(ciphertext, key) {
-  try {
-    const bytes = CryptoJS.AES.decrypt(ciphertext, key)
-    const decryptedString = bytes.toString(CryptoJS.enc.Utf8)
-    if (!decryptedString) return null
-    return JSON.parse(decryptedString)
-  } catch (error) {
-    console.error('解密失败:', error)
-    return null
-  }
-}
-
+// --- 密码生成辅助函数 (无变化) ---
 function generatePassword(config) {
   const charSets = {
     lowercase: 'abcdefghijklmnopqrstuvwxyz',
@@ -74,11 +52,10 @@ function generatePassword(config) {
 // --- Pinia Store 定义 ---
 export const usePasswordStore = defineStore('password', () => {
   // --- STATE ---
-  const vaultStatus = ref('locked')
-  const encryptionKey = ref(null)
+  // vaultStatus 和 encryptionKey 已被移除
+  const isReady = ref(false) // 新增状态，表示数据是否加载完毕
   const isLoading = ref(false)
   const searchQuery = ref('')
-  const userSalt = ref(null)
   const config = ref({
     length: 16,
     useUppercase: true,
@@ -94,10 +71,9 @@ export const usePasswordStore = defineStore('password', () => {
   const archive = ref([])
 
   // --- GETTERS ---
-  const isUnlocked = computed(() => vaultStatus.value === 'unlocked')
-  // [修改] 排序逻辑移到 action 中，确保任何修改后都重新排序
+  // isUnlocked 现在直接反映 isReady 状态
+  const isUnlocked = computed(() => isReady.value)
   const filteredArchive = computed(() => {
-    if (!isUnlocked.value) return []
     if (!searchQuery.value) return archive.value
     const query = searchQuery.value.toLowerCase()
     return archive.value.filter(
@@ -110,136 +86,44 @@ export const usePasswordStore = defineStore('password', () => {
 
   // --- ACTIONS ---
 
-  // [新增] 统一的排序函数
   function sortArchive() {
     archive.value.sort(
       (a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt),
     )
   }
 
-  // checkVaultStatus, initializeWithAccountPassword, unlockWithAccountPassword (基本无变化, 仅在解锁成功后调用排序)
-  async function checkVaultStatus() {
+  // [重写] loadVault 用于在应用启动时直接加载数据
+  async function loadVault() {
     isLoading.value = true
+    isReady.value = false
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('用户未登录')
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('salt, password_verifier')
-        .eq('id', user.id)
-        .single()
-      if (error) {
-        if (error.code === 'PGRST116')
-          throw new Error('当前用户的配置不存在。请尝试重新登录或联系技术支持。')
-        throw new Error('无法获取用户配置。')
-      }
-      userSalt.value = profile.salt
-      if (profile && profile.password_verifier) {
-        vaultStatus.value = 'locked'
-      } else {
-        vaultStatus.value = 'uninitialized'
-      }
-    } catch (error) {
-      console.error('检查密码库状态失败:', error)
-      vaultStatus.value = 'locked'
-      throw error
-    } finally {
-      isLoading.value = false
-    }
-  }
 
-  async function initializeWithAccountPassword(accountPassword) {
-    isLoading.value = true
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) throw new Error('用户未登录')
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: accountPassword,
-      })
-      if (signInError) {
-        if (signInError.message.includes('Invalid login credentials'))
-          throw new Error('账户密码验证失败，请确认您输入的是正确的登录密码。')
-        throw new Error('验证账户时出错，请稍后重试。')
-      }
-      if (!userSalt.value) throw new Error('用户盐值不存在，无法初始化。')
-      const derivedKey = deriveKey(accountPassword, userSalt.value)
-      const verifier = 'vault-check-ok'
-      const encryptedVerifier = encryptData({ verifier }, derivedKey)
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ password_verifier: encryptedVerifier })
-        .eq('id', user.id)
-      if (updateError) throw new Error('创建密码库失败，请重试。')
-      encryptionKey.value = derivedKey
-      archive.value = []
-      vaultStatus.value = 'unlocked'
-      return true
-    } catch (error) {
-      console.error('初始化密码库失败:', error)
-      lockVault()
-      throw error
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  async function unlockWithAccountPassword(accountPassword) {
-    isLoading.value = true
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) throw new Error('认证会话已失效，请重新登录。')
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: accountPassword,
-      })
-      if (signInError) {
-        if (signInError.message.includes('Invalid login credentials'))
-          throw new Error('账户密码验证失败，请确认您输入的是正确的登录密码。')
-        throw new Error('验证账户时出错，请稍后重试。')
-      }
-      const derivedKey = deriveKey(accountPassword, userSalt.value)
-      const { data: encryptedDataFromDB, error: fetchError } = await supabase
+      // 直接从数据库获取明文数据
+      // 注意：列名已从 'encrypted_data' 变为 'password_data'
+      const { data, error } = await supabase
         .from('passwords')
-        .select('id, encrypted_data')
+        .select('id, password_data')
         .eq('user_id', user.id)
-      if (fetchError) throw new Error('获取密码数据失败，请检查网络连接。')
-      const decryptedArchive = []
-      for (const item of encryptedDataFromDB) {
-        const decrypted = decryptData(item.encrypted_data, derivedKey)
-        if (!decrypted) {
-          console.error('数据解密失败，但密码已验证。可能存在数据损坏。Item ID:', item.id)
-          continue
-        }
-        decryptedArchive.push({ id: item.id, ...decrypted })
-      }
-      encryptionKey.value = derivedKey
-      archive.value = decryptedArchive
-      sortArchive() // [修改] 解锁后排序
-      vaultStatus.value = 'unlocked'
-      return true
+
+      if (error) throw error
+
+      // 将获取的数据加载到 archive 中
+      archive.value = data.map(item => ({
+        id: item.id,
+        ...item.password_data
+      }))
+
+      sortArchive()
+      isReady.value = true // 数据加载完成，应用准备就绪
     } catch (error) {
-      console.error('解锁失败:', error.message)
-      lockVault()
-      throw error
+      console.error('加载密码库失败:', error)
+      archive.value = []
+      throw error // 抛出错误给 UI 层处理
     } finally {
       isLoading.value = false
     }
-  }
-
-  function lockVault() {
-    encryptionKey.value = null
-    if (vaultStatus.value === 'unlocked') {
-      vaultStatus.value = 'locked'
-    }
-    archive.value = []
-    searchQuery.value = ''
   }
 
   function generateNewPassword() {
@@ -248,41 +132,41 @@ export const usePasswordStore = defineStore('password', () => {
     currentGenerated.value.strength = zxcvbn(password)
   }
 
+  // [重写] 保存密码，不再加密
   async function savePassword(details) {
-    if (!isUnlocked.value) throw new Error('密码库未解锁，无法保存。')
+    if (!isReady.value) throw new Error('数据尚未准备好，无法保存。')
     isLoading.value = true
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('用户未登录，无法保存。')
 
       const newEntry = {
         ...details,
         password: currentGenerated.value.password,
-        // [新增] 保存密码强度
         strength: currentGenerated.value.strength.score,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), // [新增] updatedAt
+        updatedAt: new Date().toISOString(),
         history: [],
       }
-      const encryptedData = encryptData(newEntry, encryptionKey.value)
+
+      // 注意：列名为 'password_data'，存储的是普通 JSON 对象
       const { data, error } = await supabase
         .from('passwords')
-        .insert({ user_id: user.id, encrypted_data: encryptedData })
+        .insert({ user_id: user.id, password_data: newEntry })
         .select('id')
         .single()
       if (error) throw error
+
       archive.value.unshift({ id: data.id, ...newEntry })
-      sortArchive() // [修改] 保存后排序
+      sortArchive()
     } finally {
       isLoading.value = false
     }
   }
 
-  // [新增] 强大的 updatePassword 函数
+  // [重写] 更新密码，不再加密
   async function updatePassword(id, updates) {
-    if (!isUnlocked.value) throw new Error('密码库未解锁，无法更新。')
+    if (!isReady.value) throw new Error('数据尚未准备好，无法更新。')
     isLoading.value = true
     try {
       const itemIndex = archive.value.findIndex((item) => item.id === id)
@@ -291,33 +175,32 @@ export const usePasswordStore = defineStore('password', () => {
       const originalItem = archive.value[itemIndex]
       const updatedItem = { ...originalItem, ...updates, updatedAt: new Date().toISOString() }
 
-      // 如果密码被更新，处理历史记录
+      delete updatedItem.id // 从要存储的 JSON 中移除 id
+
       if (updates.password && updates.password !== originalItem.password) {
         if (!updatedItem.history) updatedItem.history = []
         updatedItem.history.unshift({
           password: originalItem.password,
           date: originalItem.updatedAt || originalItem.createdAt,
         })
-        // [新增] 同时更新密码强度
         updatedItem.strength = zxcvbn(updates.password).score
       }
 
-      const encryptedData = encryptData(updatedItem, encryptionKey.value)
+      // 注意：列名为 'password_data'
       const { error } = await supabase
         .from('passwords')
-        .update({ encrypted_data: encryptedData })
+        .update({ password_data: updatedItem })
         .eq('id', id)
       if (error) throw error
 
-      archive.value[itemIndex] = updatedItem
-      sortArchive() // [修改] 更新后排序
+      archive.value[itemIndex] = { id, ...updatedItem }
+      sortArchive()
     } finally {
       isLoading.value = false
     }
   }
 
   async function deletePassword(id) {
-    if (!isUnlocked.value) throw new Error('密码库未解锁，无法删除。')
     isLoading.value = true
     try {
       const { error } = await supabase.from('passwords').delete().eq('id', id)
@@ -329,22 +212,18 @@ export const usePasswordStore = defineStore('password', () => {
   }
 
   return {
-    vaultStatus,
-    encryptionKey,
-    isUnlocked,
+    isReady,
+    isUnlocked, // 保留 isUnlocked 以兼容现有模板
     isLoading,
     searchQuery,
     config,
     currentGenerated,
     archive,
     filteredArchive,
-    checkVaultStatus,
-    initializeWithAccountPassword,
-    unlockWithAccountPassword,
-    lockVault,
+    loadVault, // 新的加载函数
     generateNewPassword,
     savePassword,
     deletePassword,
-    updatePassword, // [新增] 导出新函数
+    updatePassword,
   }
 })
