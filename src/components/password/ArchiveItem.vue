@@ -6,6 +6,11 @@
       <div class="item-info">
         <strong class="platform">{{ item.platform }}</strong>
         <span v-if="item.label" class="label">{{ item.label }}</span>
+        <!-- [新增] 创建日期显示区域 -->
+        <div v-if="formattedDate" class="creation-date">
+          <i class="fas fa-calendar-alt"></i>
+          <span>{{ formattedDate }}</span>
+        </div>
         <div class="password-field" @click="togglePasswordVisibility" title="点击显示/隐藏密码">
           <span v-if="!isPasswordVisible" class="password-masked">••••••••••••</span>
           <span v-else class="password-visible">{{ item.password }}</span>
@@ -15,7 +20,6 @@
         <button @click.stop="copyItemPassword" class="action-btn" :title="copied ? '已复制!' : '复制密码'">
           <i :class="['fas', copied ? 'fa-check' : 'fa-copy']"></i>
         </button>
-        <!-- [已修改] 点击时不再调用 confirmDelete，而是显示模态框 -->
         <button @click.stop="showDeleteConfirm = true" class="action-btn delete-btn" title="删除">
           <i class="fas fa-trash"></i>
         </button>
@@ -25,7 +29,6 @@
       <p><strong>备注:</strong> {{ item.notes }}</p>
     </div>
 
-    <!-- [新增] 集成您的通用确认模态框组件 -->
     <ConfirmModal
       :show="showDeleteConfirm"
       title="确认删除密码"
@@ -39,11 +42,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+// [修改] 导入 computed
+import { ref, computed } from 'vue'
 import { usePasswordStore } from '@/stores/password'
 import { useClipboard } from '@vueuse/core'
 import { useToast } from '@/composables/useToast'
-// [新增] 导入您的通用确认模态框组件
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 
 const props = defineProps({
@@ -57,8 +60,22 @@ const { addToast } = useToast()
 const isPasswordVisible = ref(false)
 let visibilityTimer = null
 
-// [新增] 控制模态框显示的状态
 const showDeleteConfirm = ref(false)
+
+// [新增] 用于格式化日期的计算属性
+const formattedDate = computed(() => {
+  if (!props.item.createdAt) return null;
+  const date = new Date(props.item.createdAt);
+  // 格式化为 "年/月/日 时:分" 的形式，更符合中文习惯
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+});
 
 function togglePasswordVisibility() {
   isPasswordVisible.value = !isPasswordVisible.value
@@ -76,26 +93,19 @@ function copyItemPassword() {
   addToast({ message: `"${props.item.platform}" 的密码已复制`, type: 'success' })
 }
 
-/**
- * [已重构] 当用户在模态框中点击“确认”时，此函数被调用
- */
 async function handleDeleteConfirm() {
-  // 先关闭模态框
   showDeleteConfirm.value = false;
   try {
-    // 调用 store 的删除 action
     await store.deletePassword(props.item.id)
-    // 显示成功提示
     addToast({ message: '密码已成功删除', type: 'info' })
   } catch (error) {
-    // 显示失败提示
     addToast({ message: error.message || '删除失败，请重试。', type: 'error' })
   }
 }
 </script>
 
 <style lang="scss" scoped>
-/* 此组件的所有样式与上一版完全相同，无需任何改动 */
+/* 此组件的大部分样式与上一版相同 */
 .archive-item {
   background: #2E2D3D;
   border: 1px solid #313042;
@@ -126,6 +136,21 @@ async function handleDeleteConfirm() {
   .password-masked { font-family: 'SF Mono', 'Courier New', Courier, monospace; color: #737288; font-size: 1.2rem; letter-spacing: 2px; user-select: none; }
   .password-visible { font-family: 'SF Mono', 'Courier New', Courier, monospace; color: #29D47A; font-size: 1.1rem; font-weight: bold; word-break: break-all; }
 }
+
+/* [新增] 创建日期的样式 */
+.creation-date {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #737288;
+  margin-top: 4px;
+
+  i {
+    font-size: 0.8rem;
+  }
+}
+
 .item-actions {
   display: flex;
   gap: 0.75rem;
