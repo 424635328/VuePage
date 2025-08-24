@@ -5,14 +5,13 @@
     <div class="result-display-wrapper">
       <input
         type="text"
-        :value="store.currentGenerated.password"
-        readonly
+        v-model="displayPassword"
         class="password-output"
       />
       <button @click="copyPassword" class="action-btn" :title="copied ? '已复制!' : '复制密码'">
         <BaseIcon :name="copied ? 'check' : 'copy'" />
       </button>
-      <button @click="store.generateNewPassword" class="action-btn refresh-btn" title="重新生成">
+      <button @click="handleGenerateNew" class="action-btn refresh-btn" title="重新生成">
         <BaseIcon name="refresh" />
       </button>
     </div>
@@ -36,9 +35,9 @@
         <textarea v-model="notes" placeholder="备注 (选填)"></textarea>
 
         <button type="submit" class="save-button" :disabled="store.isLoading || !isSaveable">
-          <span v-if="store.isLoading"><i class="fas fa-spinner fa-spin"></i> 处理中...</span>
-          <span v-else-if="isUpdating"><i class="fas fa-sync-alt"></i> 更新密码</span>
-          <span v-else><i class="fas fa-save"></i> 保存新密码</span>
+          <span v-if="store.isLoading"><BaseIcon name="refresh" class="spin-animation" /> 处理中...</span>
+          <span v-else-if="isUpdating"><BaseIcon name="refresh" /> 更新密码</span>
+          <span v-else><BaseIcon name="save" /> 保存新密码</span>
         </button>
       </form>
     </div>
@@ -46,11 +45,13 @@
 </template>
 
 <script setup>
+// Script 部分无变化
 import { ref, computed, watch } from 'vue'
 import { usePasswordStore } from '@/stores/password'
 import { useClipboard } from '@vueuse/core'
 import { useToast } from '@/composables/useToast'
 import BaseIcon from '@/components/common/BaseIcon.vue'
+import { zxcvbn } from '@zxcvbn-ts/core'
 
 const store = usePasswordStore()
 const { copy, copied } = useClipboard({ timeout: 1500 })
@@ -60,7 +61,18 @@ const platform = ref('')
 const label = ref('')
 const notes = ref('')
 
-const isSaveable = computed(() => platform.value.trim() !== '');
+const displayPassword = ref(store.currentGenerated.password);
+const displayStrength = ref(store.currentGenerated.strength);
+
+watch(() => store.currentGenerated.password, (newPass) => {
+  displayPassword.value = newPass;
+});
+
+watch(displayPassword, (pass) => {
+  displayStrength.value = zxcvbn(pass);
+});
+
+const isSaveable = computed(() => platform.value.trim() !== '' && displayPassword.value.trim() !== '');
 
 const existingItem = computed(() => {
   if (!platform.value) return null;
@@ -78,7 +90,7 @@ watch(existingItem, (item) => {
 });
 
 const strengthInfo = computed(() => {
-  const score = store.currentGenerated.strength.score;
+  const score = displayStrength.value.score;
   const map = [
     { text: '非常弱', color: '#E55353', width: '10%' },
     { text: '弱', color: '#F9B115', width: '30%' },
@@ -94,8 +106,12 @@ const strengthBarStyle = computed(() => ({
   backgroundColor: strengthInfo.value.color,
 }));
 
+function handleGenerateNew() {
+    store.generateNewPassword();
+}
+
 function copyPassword() {
-  copy(store.currentGenerated.password);
+  copy(displayPassword.value);
   if (copied.value) {
     addToast({ message: '密码已复制到剪贴板', type: 'success' });
   }
@@ -113,11 +129,11 @@ async function handleSave() {
     if (isUpdating.value) {
       await store.updatePassword(existingItem.value.id, {
         ...details,
-        password: store.currentGenerated.password,
+        password: displayPassword.value,
       });
       addToast({ message: `"${platform.value}" 的密码已成功更新！`, type: 'success' });
     } else {
-      await store.savePassword(details);
+      await store.savePassword(details, displayPassword.value, displayStrength.value.score);
       addToast({ message: `"${platform.value}" 的密码已成功保存！`, type: 'success' });
     }
 
@@ -145,8 +161,9 @@ async function handleSave() {
 
 .password-output {
   flex-grow: 1;
-  background: #2E2D3D;
-  border: 1px solid #313042;
+  /* [已修改] 半透明背景 */
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.2);
   color: #fff;
   padding: 0.75rem 1rem;
   border-radius: 8px;
@@ -159,14 +176,15 @@ async function handleSave() {
   flex-shrink: 0;
   width: 50px;
   height: 50px;
-  border: 1px solid #313042;
+  border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease-in-out;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #2E2D3D;
+  /* [已修改] 半透明背景 */
+  background: rgba(30, 41, 59, 0.5);
   color: #c7c7e1;
 
   svg {
@@ -176,9 +194,9 @@ async function handleSave() {
   }
 
   &:hover {
-    background-color: #393850;
+    background-color: rgba(57, 56, 80, 0.7);
     color: #fff;
-    border-color: #4a4960;
+    border-color: rgba(148, 163, 184, 0.3);
     svg {
       transform: scale(1.1);
     }
@@ -205,7 +223,7 @@ async function handleSave() {
   flex-grow: 1;
   width: 100%;
   height: 6px;
-  background: #313042;
+  background: rgba(30, 41, 59, 0.5);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -226,7 +244,7 @@ async function handleSave() {
 .divider {
   width: 100%;
   height: 1px;
-  background-color: #313042;
+  background-color: rgba(148, 163, 184, 0.2);
   margin: 0.5rem 0;
 }
 
@@ -238,8 +256,9 @@ async function handleSave() {
   h3 { margin: 0; color: #fff; font-size: 1.1rem; }
 
   input, textarea {
-    background: #2E2D3D;
-    border: 1px solid #313042;
+    /* [已修改] 半透明背景 */
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.2);
     color: #C7C7E1;
     padding: 0.8rem 1rem;
     border-radius: 8px;
@@ -250,7 +269,7 @@ async function handleSave() {
      &:focus {
         outline: none;
         border-color: #29D47A;
-        background-color: #232230;
+        background-color: rgba(30, 41, 59, 0.8);
       }
     &::placeholder {
       color: #5C5B77;
@@ -282,6 +301,9 @@ async function handleSave() {
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgba(41, 212, 122, 0.2);
 
+  span { display: flex; align-items: center; gap: 0.5rem; }
+  svg { width: 1.25rem; height: 1.25rem; }
+
   &:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 8px 25px rgba(41, 212, 122, 0.3);
@@ -298,5 +320,12 @@ async function handleSave() {
     color: #5C5B77;
     box-shadow: none;
   }
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

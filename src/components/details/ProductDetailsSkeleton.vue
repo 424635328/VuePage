@@ -1,3 +1,5 @@
+<!-- src/components/details/ProductDetailsSkeleton.vue -->
+
 <template>
   <div class="skeleton-container">
     <div class="details-layout">

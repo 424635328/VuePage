@@ -1,7 +1,12 @@
 <!-- src/components/password/ArchiveItem.vue -->
 
 <template>
-  <div class="archive-item">
+  <div class="archive-item" :class="{ 'is-selected': isSelected }" @click="toggleSelection">
+    <div class="selection-checkbox">
+      <input type="checkbox" :checked="isSelected" @click.stop="toggleSelection" />
+      <span class="checkmark"></span>
+    </div>
+
     <div class="item-main">
       <div class="item-info">
         <div class="info-header">
@@ -12,10 +17,10 @@
         </div>
         <span v-if="item.label" class="label">{{ item.label }}</span>
         <div class="creation-date">
-          <i class="fas fa-calendar-alt"></i>
+          <BaseIcon name="calendar-days" />
           <span>{{ formattedDate }}</span>
         </div>
-        <div class="password-field" @click="togglePasswordVisibility" title="点击显示/隐藏密码">
+        <div class="password-field" @click.stop="togglePasswordVisibility" title="点击显示/隐藏密码">
           <span v-if="!isPasswordVisible" class="password-masked">••••••••••••</span>
           <span v-else class="password-visible">{{ item.password }}</span>
         </div>
@@ -32,6 +37,7 @@
         </button>
       </div>
     </div>
+
     <div v-if="item.notes" class="item-notes">
       <p><strong>备注:</strong> {{ item.notes }}</p>
     </div>
@@ -55,6 +61,7 @@
 </template>
 
 <script setup>
+// Script部分无变化
 import { ref, computed } from 'vue'
 import { usePasswordStore } from '@/stores/password'
 import { useClipboard } from '@vueuse/core'
@@ -76,6 +83,12 @@ let visibilityTimer = null
 
 const showDeleteConfirm = ref(false)
 const showEditModal = ref(false)
+
+const isSelected = computed(() => store.selectedItems.has(props.item.id));
+
+function toggleSelection() {
+  store.toggleSelection(props.item.id);
+}
 
 const formattedDate = computed(() => {
   const dateStr = props.item.updatedAt || props.item.createdAt;
@@ -134,18 +147,77 @@ async function handleSaveChanges(updates) {
 
 <style lang="scss" scoped>
 .archive-item {
-  background: #2E2D3D;
-  border: 1px solid #313042;
-  border-radius: 12px;
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 1rem;
-  transition: background 0.2s, box-shadow 0.2s, border-color 0.2s;
-  &:hover { background: #393850; border-color: #4a4960; }
+  /* [已修改] 背景透明化 */
+  background: transparent;
+  /* [已修改] 移除边框和圆角，使用底部边框作为分隔 */
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+
+  padding: 1.25rem 0.5rem; /* 调整内边距 */
+  margin-bottom: 0;
+  transition: background 0.2s;
+  cursor: pointer;
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+
+  &.is-selected {
+    /* [已修改] 选中状态改为半透明背景 */
+    background: rgba(41, 212, 122, 0.1);
+  }
+  &:hover:not(.is-selected) {
+    /* [已修改] 悬停状态也改为半透明背景 */
+    background: rgba(148, 163, 184, 0.05);
+  }
 }
+.selection-checkbox {
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 5px;
+
+  input[type="checkbox"] {
+    opacity: 0;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    position: absolute;
+  }
+
+  .checkmark {
+    position: relative;
+    top: 0; left: 0;
+    height: 20px; width: 20px;
+    background-color: #313042;
+    border-radius: 4px;
+    display: block;
+    transition: background-color 0.2s;
+    &::after {
+      content: "";
+      position: absolute;
+      display: none;
+      left: 7px; top: 4px;
+      width: 5px; height: 10px;
+      border: solid white;
+      border-width: 0 3px 3px 0;
+      transform: rotate(45deg);
+    }
+  }
+
+  input:checked ~ .checkmark {
+    background-color: #29D47A;
+  }
+  input:checked ~ .checkmark::after {
+    display: block;
+  }
+}
+
+
 .item-main {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-grow: 1;
 }
 .item-info {
   display: flex; flex-direction: column;
@@ -174,7 +246,10 @@ async function handleSaveChanges(updates) {
 .creation-date {
   display: flex; align-items: center; gap: 0.5rem;
   font-size: 0.85rem; color: #737288; margin-top: 4px;
-  i { font-size: 0.8rem; }
+  svg {
+      width: 1rem;
+      height: 1rem;
+  }
 }
 
 .item-actions {
@@ -232,5 +307,8 @@ async function handleSaveChanges(updates) {
     line-height: 1.6;
     strong { color: #fff; }
   }
+  flex-basis: 100%;
+  display: none;
+  .archive-item.is-selected & { display: block; }
 }
 </style>

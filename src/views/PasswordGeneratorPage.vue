@@ -1,5 +1,3 @@
-<!-- src/views/PasswordGeneratorPage.vue -->
-
 <template>
   <div class="page-wrapper">
     <!-- 加载与错误状态界面 -->
@@ -34,6 +32,12 @@
       <header class="toolbar">
         <div class="toolbar-left">
           <h1><BaseIcon name="key" /> 密码管家</h1>
+
+          <!-- 解码器入口按钮 -->
+          <button @click="showDecoderModal = true" class="tool-btn">
+            <BaseIcon name="lock-open" /> 解码器
+          </button>
+
           <div class="status-badge">
             <BaseIcon name="check" /> 已连接
           </div>
@@ -46,7 +50,6 @@
           <button @click="passwordStore.generateNewPassword" class="action-btn generate">
             <BaseIcon name="refresh" /> 生成
           </button>
-          <!-- 锁定按钮已被移除 -->
         </div>
       </header>
 
@@ -77,6 +80,9 @@
         </section>
       </main>
     </div>
+
+    <!-- 密码解码器模态框 -->
+    <PasswordDecoder :show="showDecoderModal" @close="showDecoderModal = false" />
   </div>
 </template>
 
@@ -88,12 +94,12 @@ import GeneratorControls from '@/components/password/GeneratorControls.vue'
 import GeneratedResult from '@/components/password/GeneratedResult.vue'
 import ArchiveManager from '@/components/password/ArchiveManager.vue'
 import BaseIcon from '@/components/common/BaseIcon.vue'
+import PasswordDecoder from '@/components/decoder/PasswordDecoder.vue'
 
 const passwordStore = usePasswordStore()
 const { addToast } = useToast()
 const pageError = ref('')
-
-// 移除了所有与解锁表单、自动锁定相关的 state 和函数
+const showDecoderModal = ref(false)
 
 function formatTime(date) {
   return date.toLocaleTimeString('zh-CN', {
@@ -104,7 +110,6 @@ function formatTime(date) {
 
 onMounted(async () => {
   try {
-    // 调用新的加载函数
     await passwordStore.loadVault();
     passwordStore.generateNewPassword();
     addToast({ message: '密码库已加载', type: 'success' });
@@ -114,8 +119,6 @@ onMounted(async () => {
     addToast({ message: errorMessage, type: 'error', duration: 5000 });
   }
 })
-
-// onUnmounted 和 watch 中与自动锁定相关的逻辑已被移除
 </script>
 
 <style lang="scss" scoped>
@@ -149,7 +152,7 @@ onMounted(async () => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* === 加载/错误界面 (复用 unlock-screen 样式) === */
+/* === 加载/错误界面 === */
 .unlock-screen {
   min-height: 100vh;
   display: flex;
@@ -278,6 +281,31 @@ onMounted(async () => {
       }
     }
 
+    .tool-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--warning, #f59e0b);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      cursor: pointer;
+      transition: all 0.2s;
+
+      svg {
+        width: 1rem;
+        height: 1rem;
+      }
+
+      &:hover {
+        background: rgba(245, 158, 11, 0.15);
+        color: #fbbf24;
+      }
+    }
+
     .status-badge {
       display: flex;
       align-items: center;
@@ -346,16 +374,6 @@ onMounted(async () => {
 
         &:hover {
           background: rgba(59, 130, 246, 0.15);
-        }
-      }
-
-      &.lock {
-        background: rgba(239, 68, 68, 0.1);
-        color: var(--error);
-        border: 1px solid rgba(239, 68, 68, 0.2);
-
-        &:hover {
-          background: rgba(239, 68, 68, 0.15);
         }
       }
     }

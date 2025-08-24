@@ -1,13 +1,11 @@
-// src/stores/password.js (已修改为无验证模式)
+// src/stores/password.js
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { zxcvbn } from '@zxcvbn-ts/core'
 import { supabase } from '@/lib/supabaseClient'
 
-// --- 加密相关的辅助函数已被移除 ---
-
-// --- 密码生成辅助函数 (无变化) ---
+// --- [已升级] 密码生成辅助函数 ---
 function generatePassword(config) {
   const charSets = {
     lowercase: 'abcdefghijklmnopqrstuvwxyz',
@@ -15,45 +13,70 @@ function generatePassword(config) {
     numbers: '0123456789',
     symbols: '!@#$%^&*()_+-=[]{}|;:,.<>?',
   }
-  const similarChars = /[il1O0]/g
+
   let availableChars = ''
   if (config.useLowercase) availableChars += charSets.lowercase
   if (config.useUppercase) availableChars += charSets.uppercase
   if (config.useNumbers) availableChars += charSets.numbers
   if (config.useSymbols) availableChars += charSets.symbols
-  if (config.excludeSimilar) availableChars = availableChars.replace(similarChars, '')
+
+  // 1. 排除易混淆字符
+  if (config.excludeSimilar) {
+    const similarChars = /[il1O0]/g
+    availableChars = availableChars.replace(similarChars, '')
+  }
+
+  // 2. [新增] 排除自定义字符
+  if (config.excludeCustom && config.customExclusions) {
+    const customChars = new RegExp(`[${config.customExclusions.replace(/[-\\^$*+?.()|[\]{}]/g, '\\$&')}]`, 'g');
+    availableChars = availableChars.replace(customChars, '');
+  }
+
   if (availableChars.length === 0) return '请至少选择一个字符集'
+
   let password = ''
   const requiredChars = []
-  if (config.useLowercase)
-    requiredChars.push(charSets.lowercase[Math.floor(Math.random() * charSets.lowercase.length)])
-  if (config.useUppercase)
-    requiredChars.push(charSets.uppercase[Math.floor(Math.random() * charSets.uppercase.length)])
-  if (config.useNumbers)
-    requiredChars.push(charSets.numbers[Math.floor(Math.random() * charSets.numbers.length)])
-  if (config.useSymbols)
-    requiredChars.push(charSets.symbols[Math.floor(Math.random() * charSets.symbols.length)])
-  for (let i = requiredChars.length; i < config.length; i++) {
-    const randomIndex = Math.floor(Math.random() * availableChars.length)
-    requiredChars.push(availableChars[randomIndex])
+
+  // 3. [新增] 强制包含每种字符
+  if (config.forceInclude) {
+    if (config.useLowercase) requiredChars.push(getRandomChar(charSets.lowercase.replace(new RegExp(`[${config.customExclusions || ''}]`, 'g'), '')))
+    if (config.useUppercase) requiredChars.push(getRandomChar(charSets.uppercase.replace(new RegExp(`[${config.customExclusions || ''}]`, 'g'), '')))
+    if (config.useNumbers) requiredChars.push(getRandomChar(charSets.numbers.replace(new RegExp(`[${config.customExclusions || ''}]`, 'g'), '')))
+    if (config.useSymbols) requiredChars.push(getRandomChar(charSets.symbols.replace(new RegExp(`[${config.customExclusions || ''}]`, 'g'), '')))
   }
+
+  // 填充剩余长度
+  for (let i = requiredChars.length; i < config.length; i++) {
+    requiredChars.push(getRandomChar(availableChars))
+  }
+
+  // 洗牌算法，打乱数组顺序
   for (let i = requiredChars.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[requiredChars[i], requiredChars[j]] = [requiredChars[j], requiredChars[i]]
   }
+
   password = requiredChars.join('')
+
+  // 避免生成弱密码（黑名单检查）
   const weakPasswordBlacklist = new Set(['123456', 'password', 'qwerty', 'admin123'])
   if (weakPasswordBlacklist.has(password)) {
-    return generatePassword(config)
+    return generatePassword(config) // 递归调用以重新生成
   }
+
   return password
 }
+
+function getRandomChar(charset) {
+  if (!charset) return '';
+  return charset[Math.floor(Math.random() * charset.length)];
+}
+
 
 // --- Pinia Store 定义 ---
 export const usePasswordStore = defineStore('password', () => {
   // --- STATE ---
-  // vaultStatus 和 encryptionKey 已被移除
-  const isReady = ref(false) // 新增状态，表示数据是否加载完毕
+  const isReady = ref(false)
   const isLoading = ref(false)
   const searchQuery = ref('')
   const config = ref({
@@ -63,15 +86,19 @@ export const usePasswordStore = defineStore('password', () => {
     useNumbers: true,
     useSymbols: true,
     excludeSimilar: true,
+    // [新增] 新的配置项
+    excludeCustom: false,
+    customExclusions: '', // 用户自定义排除的字符
+    forceInclude: true, // 是否强制包含每种字符
   })
   const currentGenerated = ref({
     password: '',
     strength: { score: 0, feedback: { suggestions: [], warning: '' } },
   })
   const archive = ref([])
+  const selectedItems = ref(new Set())
 
   // --- GETTERS ---
-  // isUnlocked 现在直接反映 isReady 状态
   const isUnlocked = computed(() => isReady.value)
   const filteredArchive = computed(() => {
     if (!searchQuery.value) return archive.value
@@ -92,16 +119,14 @@ export const usePasswordStore = defineStore('password', () => {
     )
   }
 
-  // [重写] loadVault 用于在应用启动时直接加载数据
   async function loadVault() {
     isLoading.value = true
     isReady.value = false
+    clearSelection()
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('用户未登录')
 
-      // 直接从数据库获取明文数据
-      // 注意：列名已从 'encrypted_data' 变为 'password_data'
       const { data, error } = await supabase
         .from('passwords')
         .select('id, password_data')
@@ -109,18 +134,17 @@ export const usePasswordStore = defineStore('password', () => {
 
       if (error) throw error
 
-      // 将获取的数据加载到 archive 中
       archive.value = data.map(item => ({
         id: item.id,
         ...item.password_data
       }))
 
       sortArchive()
-      isReady.value = true // 数据加载完成，应用准备就绪
+      isReady.value = true
     } catch (error) {
       console.error('加载密码库失败:', error)
       archive.value = []
-      throw error // 抛出错误给 UI 层处理
+      throw error
     } finally {
       isLoading.value = false
     }
@@ -132,8 +156,7 @@ export const usePasswordStore = defineStore('password', () => {
     currentGenerated.value.strength = zxcvbn(password)
   }
 
-  // [重写] 保存密码，不再加密
-  async function savePassword(details) {
+  async function savePassword(details, password, strengthScore) {
     if (!isReady.value) throw new Error('数据尚未准备好，无法保存。')
     isLoading.value = true
     try {
@@ -142,14 +165,13 @@ export const usePasswordStore = defineStore('password', () => {
 
       const newEntry = {
         ...details,
-        password: currentGenerated.value.password,
-        strength: currentGenerated.value.strength.score,
+        password: password,
+        strength: strengthScore,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         history: [],
       }
 
-      // 注意：列名为 'password_data'，存储的是普通 JSON 对象
       const { data, error } = await supabase
         .from('passwords')
         .insert({ user_id: user.id, password_data: newEntry })
@@ -164,7 +186,6 @@ export const usePasswordStore = defineStore('password', () => {
     }
   }
 
-  // [重写] 更新密码，不再加密
   async function updatePassword(id, updates) {
     if (!isReady.value) throw new Error('数据尚未准备好，无法更新。')
     isLoading.value = true
@@ -175,7 +196,7 @@ export const usePasswordStore = defineStore('password', () => {
       const originalItem = archive.value[itemIndex]
       const updatedItem = { ...originalItem, ...updates, updatedAt: new Date().toISOString() }
 
-      delete updatedItem.id // 从要存储的 JSON 中移除 id
+      delete updatedItem.id
 
       if (updates.password && updates.password !== originalItem.password) {
         if (!updatedItem.history) updatedItem.history = []
@@ -186,7 +207,6 @@ export const usePasswordStore = defineStore('password', () => {
         updatedItem.strength = zxcvbn(updates.password).score
       }
 
-      // 注意：列名为 'password_data'
       const { error } = await supabase
         .from('passwords')
         .update({ password_data: updatedItem })
@@ -211,19 +231,91 @@ export const usePasswordStore = defineStore('password', () => {
     }
   }
 
+  function toggleSelection(id) {
+    if (selectedItems.value.has(id)) {
+      selectedItems.value.delete(id);
+    } else {
+      selectedItems.value.add(id);
+    }
+  }
+
+  function selectAll(ids) {
+    ids.forEach(id => selectedItems.value.add(id));
+  }
+
+  function clearSelection() {
+    selectedItems.value.clear();
+  }
+
+  async function deleteMultiplePasswords() {
+    isLoading.value = true;
+    const idsToDelete = Array.from(selectedItems.value);
+    try {
+      const { error } = await supabase.from('passwords').delete().in('id', idsToDelete);
+      if (error) throw error;
+
+      archive.value = archive.value.filter(item => !idsToDelete.includes(item.id));
+      clearSelection();
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function batchAddPasswords(items) {
+    isLoading.value = true;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('用户未登录，无法导入。');
+
+      const newEntries = items.map(item => ({
+        user_id: user.id,
+        password_data: {
+          platform: item.platform,
+          label: item.label || '',
+          notes: item.notes || '',
+          password: item.password,
+          strength: zxcvbn(item.password).score,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          history: [],
+        },
+      }));
+
+      const { data, error } = await supabase.from('passwords').insert(newEntries).select('id, password_data');
+      if (error) throw error;
+
+      const newlyAddedItems = data.map(item => ({
+        id: item.id,
+        ...item.password_data
+      }));
+
+      archive.value.unshift(...newlyAddedItems);
+      sortArchive();
+      return newlyAddedItems.length;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   return {
     isReady,
-    isUnlocked, // 保留 isUnlocked 以兼容现有模板
+    isUnlocked,
     isLoading,
     searchQuery,
     config,
     currentGenerated,
     archive,
     filteredArchive,
-    loadVault, // 新的加载函数
+    selectedItems,
+    loadVault,
     generateNewPassword,
     savePassword,
     deletePassword,
     updatePassword,
+    toggleSelection,
+    selectAll,
+    clearSelection,
+    deleteMultiplePasswords,
+    batchAddPasswords,
   }
 })
