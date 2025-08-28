@@ -1,3 +1,5 @@
+<!-- src/components/password/ArchiveItem.vue -->
+
 <template>
   <div class="archive-item-wrapper">
     <div class="archive-item" :class="{ 'is-selected': isSelected, 'is-expanded': isHistoryVisible }" @click="toggleSelection">

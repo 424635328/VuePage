@@ -1,3 +1,5 @@
+<!-- src/components/password/ArchiveManager.vue -->
+
 <template>
   <div class="archive-manager-container">
     <div class="archive-header">

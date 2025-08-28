@@ -1,3 +1,5 @@
+<!-- src/views/PasswordGeneratorPage.vue -->
+
 <template>
   <div class="page-wrapper">
     <!-- 加载与错误状态界面 -->
