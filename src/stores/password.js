@@ -1,5 +1,3 @@
-// src/stores/password.js
-
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { zxcvbn } from '@zxcvbn-ts/core'
@@ -14,6 +12,11 @@ function generatePassword(config) {
     symbols: '!@#$%^&*()_+-=[]{}|;:,.<>?',
   }
 
+  // --- [优化] 预编译自定义排除项的正则表达式，避免重复创建 ---
+  const customExclusionRegex = (config.excludeCustom && config.customExclusions)
+    ? new RegExp(`[${config.customExclusions.replace(/[-\\^$*+?.()|[\]{}]/g, '\\$&')}]`, 'g')
+    : null;
+
   let availableChars = ''
   if (config.useLowercase) availableChars += charSets.lowercase
   if (config.useUppercase) availableChars += charSets.uppercase
@@ -26,10 +29,9 @@ function generatePassword(config) {
     availableChars = availableChars.replace(similarChars, '')
   }
 
-  // 2. [新增] 排除自定义字符
-  if (config.excludeCustom && config.customExclusions) {
-    const customChars = new RegExp(`[${config.customExclusions.replace(/[-\\^$*+?.()|[\]{}]/g, '\\$&')}]`, 'g');
-    availableChars = availableChars.replace(customChars, '');
+  // 2. [已优化] 使用预编译的正则表达式排除自定义字符
+  if (customExclusionRegex) {
+    availableChars = availableChars.replace(customExclusionRegex, '');
   }
 
   if (availableChars.length === 0) return '请至少选择一个字符集'
@@ -39,10 +41,12 @@ function generatePassword(config) {
 
   // 3. [新增] 强制包含每种字符
   if (config.forceInclude) {
-    if (config.useLowercase) requiredChars.push(getRandomChar(charSets.lowercase.replace(new RegExp(`[${config.customExclusions || ''}]`, 'g'), '')))
-    if (config.useUppercase) requiredChars.push(getRandomChar(charSets.uppercase.replace(new RegExp(`[${config.customExclusions || ''}]`, 'g'), '')))
-    if (config.useNumbers) requiredChars.push(getRandomChar(charSets.numbers.replace(new RegExp(`[${config.customExclusions || ''}]`, 'g'), '')))
-    if (config.useSymbols) requiredChars.push(getRandomChar(charSets.symbols.replace(new RegExp(`[${config.customExclusions || ''}]`, 'g'), '')))
+    const applyExclusions = (charset) => customExclusionRegex ? charset.replace(customExclusionRegex, '') : charset;
+
+    if (config.useLowercase) requiredChars.push(getRandomChar(applyExclusions(charSets.lowercase)))
+    if (config.useUppercase) requiredChars.push(getRandomChar(applyExclusions(charSets.uppercase)))
+    if (config.useNumbers) requiredChars.push(getRandomChar(applyExclusions(charSets.numbers)))
+    if (config.useSymbols) requiredChars.push(getRandomChar(applyExclusions(charSets.symbols)))
   }
 
   // 填充剩余长度
@@ -86,10 +90,9 @@ export const usePasswordStore = defineStore('password', () => {
     useNumbers: true,
     useSymbols: true,
     excludeSimilar: true,
-    // [新增] 新的配置项
     excludeCustom: false,
-    customExclusions: '', // 用户自定义排除的字符
-    forceInclude: true, // 是否强制包含每种字符
+    customExclusions: '',
+    forceInclude: true,
   })
   const currentGenerated = ref({
     password: '',
@@ -187,36 +190,51 @@ export const usePasswordStore = defineStore('password', () => {
   }
 
   async function updatePassword(id, updates) {
-    if (!isReady.value) throw new Error('数据尚未准备好，无法更新。')
-    isLoading.value = true
+    if (!isReady.value) throw new Error('数据尚未准备好，无法更新。');
+    isLoading.value = true;
     try {
-      const itemIndex = archive.value.findIndex((item) => item.id === id)
-      if (itemIndex === -1) throw new Error('未找到要更新的项目。')
+      const itemIndex = archive.value.findIndex((item) => item.id === id);
+      if (itemIndex === -1) throw new Error('未找到要更新的项目。');
 
-      const originalItem = archive.value[itemIndex]
-      const updatedItem = { ...originalItem, ...updates, updatedAt: new Date().toISOString() }
+      const originalItem = archive.value[itemIndex];
 
-      delete updatedItem.id
+      // [修正] 创建一个最终用于本地状态的完整对象
+      const finalItemForState = {
+        ...originalItem,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
 
-      if (updates.password && updates.password !== originalItem.password) {
-        if (!updatedItem.history) updatedItem.history = []
-        updatedItem.history.unshift({
+      // [关键] 检查密码是否更改，并以不可变的方式更新历史记录
+      const passwordChanged = updates.password && updates.password !== originalItem.password;
+      if (passwordChanged) {
+        // 创建一个新的 history 数组副本，而不是修改旧的
+        const newHistory = [...(originalItem.history || [])];
+        newHistory.unshift({
           password: originalItem.password,
           date: originalItem.updatedAt || originalItem.createdAt,
-        })
-        updatedItem.strength = zxcvbn(updates.password).score
+        });
+
+        finalItemForState.history = newHistory;
+        finalItemForState.strength = zxcvbn(updates.password).score;
       }
+
+      // [修正] 准备一个用于数据库的对象 (不包含 id)
+      const itemForDatabase = { ...finalItemForState };
+      delete itemForDatabase.id;
 
       const { error } = await supabase
         .from('passwords')
-        .update({ password_data: updatedItem })
-        .eq('id', id)
-      if (error) throw error
+        .update({ password_data: itemForDatabase })
+        .eq('id', id);
+      if (error) throw error;
 
-      archive.value[itemIndex] = { id, ...updatedItem }
-      sortArchive()
+      // [关键] 用最终的、全新的对象更新本地状态，确保响应式
+      archive.value[itemIndex] = finalItemForState;
+
+      sortArchive();
     } finally {
-      isLoading.value = false
+      isLoading.value = false;
     }
   }
 
